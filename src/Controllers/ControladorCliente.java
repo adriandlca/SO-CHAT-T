@@ -257,6 +257,17 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 }
             });
 
+            chat.setOnStickerSeleccionado(base64 -> {
+                String mensajeCodificado = "[STICKER]" + base64;
+
+                if (esGrupoCapturado) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
+
+                ImageIcon stickerIcon = ConversorImagen.base64ToImageIcon(base64);
+                HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", "[Sticker]", esGrupoCapturado);
+                ventanaActual.mostrarStickerConColor("Tú", stickerIcon, obtenerColorUsuario("Tú"));
+            });
+
             chatsAbiertos.put(clave, chat);
             chat.setVisible(true);
         } else {
@@ -289,6 +300,13 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 if (imagenRecibida != null) {
                     HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje, false);
                     chat.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
+                }
+            } else if (mensaje.startsWith("[STICKER]")) {
+                String base64 = mensaje.substring(9);
+                ImageIcon stickerRecibido = ConversorImagen.base64ToImageIcon(base64);
+                if (stickerRecibido != null) {
+                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, "[Sticker]", false);
+                    chat.mostrarStickerConColor(remitente, stickerRecibido, colorRemitente);
                 }
             } else {
                 String mensajeDecodificado = mensaje.replace("<BR>", "\n");
@@ -324,6 +342,13 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 if (imagenRecibida != null) {
                     HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje, true);
                     chat.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
+                }
+            } else if (mensaje.startsWith("[STICKER]")) {
+                String base64 = mensaje.substring(9);
+                ImageIcon stickerRecibido = ConversorImagen.base64ToImageIcon(base64);
+                if (stickerRecibido != null) {
+                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, "[Sticker]", true);
+                    chat.mostrarStickerConColor(remitente, stickerRecibido, colorRemitente);
                 }
             } else {
                 String mensajeDecodificado = mensaje.replace("<BR>", "\n");

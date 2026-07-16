@@ -3,9 +3,13 @@ package Views;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.Set;
+import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
@@ -26,6 +30,7 @@ public class VentanaChat extends JFrame {
 
     private java.util.function.Consumer<File> accionEnviarImagen;
     private java.util.function.Consumer<File> accionEnviarArchivo;
+    private java.util.function.Consumer<String> accionEnviarSticker;
 
     public VentanaChat(String contactoDestino) {
         super("Chat: " + contactoDestino);
@@ -89,6 +94,13 @@ public class VentanaChat extends JFrame {
         btnAdjuntarArchivo.setFocusable(false);
         btnAdjuntarArchivo.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
+        JButton btnStickers = new JButton(new StickerIcon());
+        btnStickers.setToolTipText("Enviar sticker");
+        btnStickers.setBackground(Color.WHITE);
+        btnStickers.setBorder(new EmptyBorder(4, 4, 4, 4));
+        btnStickers.setFocusable(false);
+        btnStickers.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
         jbtnEnviar = new JButton("Enviar");
         jbtnEnviar.setFont(new Font("Segoe UI", Font.BOLD, 13));
         jbtnEnviar.setForeground(Color.WHITE);
@@ -137,6 +149,11 @@ public class VentanaChat extends JFrame {
             }
         });
 
+        btnStickers.addActionListener(e -> {
+            JPopupMenu menu = crearPanelStickers();
+            menu.show(btnStickers, 0, -menu.getPreferredSize().height - 5);
+        });
+
         JPanel panelBotones = new JPanel(new BorderLayout(10, 0));
         panelBotones.setBackground(new Color(241, 245, 249));
 
@@ -144,6 +161,7 @@ public class VentanaChat extends JFrame {
         panelHerramientas.setBackground(Color.WHITE);
         panelHerramientas.add(btnAbrirEmojis);
         panelHerramientas.add(btnAdjuntarImagen);
+        panelHerramientas.add(btnStickers);
         panelHerramientas.add(btnAdjuntarArchivo);
 
         JPanel wrapperAuxiliares = new JPanel(new BorderLayout());
@@ -252,6 +270,111 @@ public class VentanaChat extends JFrame {
         return panelEmojis;
     }
 
+    private JPopupMenu crearPanelStickers() {
+        JPopupMenu panelStickers = new JPopupMenu();
+        panelStickers.setBackground(Color.WHITE);
+
+        File carpetaStickers = new File("stickers");
+        if (!carpetaStickers.exists()) {
+            carpetaStickers.mkdir();
+        }
+
+        File[] archivos = carpetaStickers.listFiles((dir, name) -> {
+            String nomLower = name.toLowerCase();
+            return nomLower.endsWith(".png") || nomLower.endsWith(".jpg")
+                    || nomLower.endsWith(".jpeg") || nomLower.endsWith(".gif");
+        });
+
+        if (archivos == null || archivos.length == 0) {
+            JLabel lblInfo = new JLabel(
+                    "<html><center>Carpeta <b>stickers/</b> vacía.<br>Guarda imágenes PNG o JPG allí.</center></html>",
+                    SwingConstants.CENTER);
+            lblInfo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            lblInfo.setForeground(new Color(100, 116, 139));
+            lblInfo.setBorder(new EmptyBorder(15, 15, 15, 15));
+            lblInfo.setBackground(Color.WHITE);
+            lblInfo.setOpaque(true);
+            panelStickers.add(lblInfo);
+            panelStickers.setPreferredSize(new Dimension(240, 90));
+            return panelStickers;
+        }
+
+        int columnas = 3;
+        int filas = (int) Math.ceil((double) archivos.length / columnas);
+        JPanel panelCuadricula = new JPanel(new GridLayout(filas, columnas, 6, 6));
+        panelCuadricula.setBackground(Color.WHITE);
+        panelCuadricula.setBorder(new EmptyBorder(6, 6, 6, 6));
+
+        for (File archivo : archivos) {
+            try {
+                BufferedImage original = ImageIO.read(archivo);
+                if (original == null) continue;
+
+                BufferedImage miniatura = redimensionarBuffered(original, 55, 55);
+                ImageIcon iconoSticker = new ImageIcon(miniatura);
+
+                JButton btnSticker = new JButton(iconoSticker);
+                btnSticker.setBackground(new Color(248, 250, 252));
+                btnSticker.setBorder(new LineBorder(new Color(226, 232, 240), 1, true));
+                btnSticker.setFocusable(false);
+                btnSticker.setCursor(new Cursor(Cursor.HAND_CURSOR));
+                btnSticker.setToolTipText(archivo.getName());
+
+                btnSticker.addActionListener(e -> {
+                    BufferedImage stickerEstandar = redimensionarBuffered(original, 120, 120);
+                    String base64 = bufferedToBase64(stickerEstandar);
+                    if (base64 != null && accionEnviarSticker != null) {
+                        accionEnviarSticker.accept(base64);
+                    }
+                    panelStickers.setVisible(false);
+                });
+
+                panelCuadricula.add(btnSticker);
+            } catch (Exception ex) {
+                System.err.println("Error al cargar sticker: " + archivo.getName());
+            }
+        }
+
+        JPanel panelAlineador = new JPanel(new BorderLayout());
+        panelAlineador.setBackground(Color.WHITE);
+        panelAlineador.add(panelCuadricula, BorderLayout.NORTH);
+
+        JScrollPane scrollStickers = new JScrollPane(panelAlineador);
+        scrollStickers.setBorder(null);
+        scrollStickers.getVerticalScrollBar().setUnitIncrement(14);
+        scrollStickers.setPreferredSize(new Dimension(240, 220));
+
+        panelStickers.add(scrollStickers);
+        panelStickers.setPreferredSize(new Dimension(250, 230));
+        return panelStickers;
+    }
+
+    private BufferedImage redimensionarBuffered(BufferedImage original, int anchoMax, int altoMax) {
+        int anchoOriginal = original.getWidth();
+        int altoOriginal = original.getHeight();
+        double ratio = Math.min((double) anchoMax / anchoOriginal, (double) altoMax / altoOriginal);
+        int nuevoAncho = (int) (anchoOriginal * ratio);
+        int nuevoAlto = (int) (altoOriginal * ratio);
+
+        BufferedImage redimensionada = new BufferedImage(nuevoAncho, nuevoAlto, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = redimensionada.createGraphics();
+        g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+        g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+        g.drawImage(original, 0, 0, nuevoAncho, nuevoAlto, null);
+        g.dispose();
+        return redimensionada;
+    }
+
+    private String bufferedToBase64(BufferedImage image) {
+        try {
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            ImageIO.write(image, "png", baos);
+            return Base64.getEncoder().encodeToString(baos.toByteArray());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public void mostrarMensajeConColor(String remitente, String mensaje, Color colorRemitente) {
         String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
         boolean esMio = nombreLimpio.equals("Tú");
@@ -269,6 +392,37 @@ public class VentanaChat extends JFrame {
 
         BurbujaMensaje burbuja = new BurbujaMensaje(nombreLimpio, imagen, colorRemitente, esMio);
         panelContenedorMensajes.add(burbuja);
+        panelContenedorMensajes.revalidate();
+        panelContenedorMensajes.repaint();
+        desplazarScrollAlFinal();
+    }
+
+    public void mostrarStickerConColor(String remitente, ImageIcon sticker, Color colorRemitente) {
+        String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
+        boolean esMio = nombreLimpio.equals("Tú");
+
+        JPanel panelAlineador = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        panelAlineador.setOpaque(false);
+
+        JPanel panelStickerCompleto = new JPanel();
+        panelStickerCompleto.setLayout(new BoxLayout(panelStickerCompleto, BoxLayout.Y_AXIS));
+        panelStickerCompleto.setOpaque(false);
+        panelStickerCompleto.setBorder(new EmptyBorder(5, 10, 5, 10));
+
+        JLabel lblNombre = new JLabel(nombreLimpio);
+        lblNombre.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        lblNombre.setForeground(colorRemitente);
+        lblNombre.setAlignmentX(esMio ? Component.RIGHT_ALIGNMENT : Component.LEFT_ALIGNMENT);
+        panelStickerCompleto.add(lblNombre);
+
+        panelStickerCompleto.add(Box.createVerticalStrut(4));
+
+        JLabel lblStickerGrafico = new JLabel(sticker);
+        lblStickerGrafico.setAlignmentX(esMio ? Component.RIGHT_ALIGNMENT : Component.LEFT_ALIGNMENT);
+        panelStickerCompleto.add(lblStickerGrafico);
+
+        panelAlineador.add(panelStickerCompleto);
+        panelContenedorMensajes.add(panelAlineador);
         panelContenedorMensajes.revalidate();
         panelContenedorMensajes.repaint();
         desplazarScrollAlFinal();
@@ -346,6 +500,7 @@ public class VentanaChat extends JFrame {
     public void setAccionEscribiendo(java.util.function.Consumer<Boolean> accion) { this.accionEscribiendo = accion; }
     public void setOnImagenSeleccionada(java.util.function.Consumer<File> accion) { this.accionEnviarImagen = accion; }
     public void setOnArchivoSeleccionado(java.util.function.Consumer<File> accion) { this.accionEnviarArchivo = accion; }
+    public void setOnStickerSeleccionado(java.util.function.Consumer<String> accion) { this.accionEnviarSticker = accion; }
     public String getMensajeEscrito() { return taInputMensaje.getText(); }
 
     public void limpiarInput() {
@@ -396,6 +551,28 @@ public class VentanaChat extends JFrame {
             g2.drawLine(7, 7, 11, 11);
             g2.drawLine(10, 10, 12, 8);
             g2.drawLine(12, 8, 16, 12);
+            g2.dispose();
+        }
+        @Override public int getIconWidth() { return 18; }
+        @Override public int getIconHeight() { return 18; }
+    }
+
+    private static class StickerIcon implements Icon {
+        @Override
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new Color(71, 85, 105));
+            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2.translate(x, y);
+            g2.drawLine(9, 1, 9, 7);
+            g2.drawLine(9, 11, 9, 17);
+            g2.drawLine(1, 9, 7, 9);
+            g2.drawLine(11, 9, 17, 9);
+            g2.drawLine(3, 3, 6, 6);
+            g2.drawLine(12, 12, 15, 15);
+            g2.drawLine(15, 3, 12, 6);
+            g2.drawLine(6, 12, 3, 15);
             g2.dispose();
         }
         @Override public int getIconWidth() { return 18; }
