@@ -4,6 +4,7 @@ import Views.VentanaChat;
 import Views.VentanaContactos;
 import Views.VentanaPrincipal;
 import Views.ConversorImagen;
+import Views.ManejadorArchivos;
 import java.awt.Color;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -27,12 +28,8 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
 
     private Map<String, Color> coloresUsuarios;
     private Color[] listaColores = {
-            new Color(255, 87, 51),
-            new Color(0, 150, 136),
-            new Color(51, 87, 255),
-            new Color(156, 39, 176),
-            new Color(255, 51, 209),
-            new Color(255, 152, 0)
+            new Color(255, 87, 51), new Color(0, 150, 136), new Color(51, 87, 255),
+            new Color(156, 39, 176), new Color(255, 51, 209), new Color(255, 152, 0)
     };
     private int indiceColor = 0;
 
@@ -56,7 +53,6 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             this.salida = new PrintWriter(conexion.socket.getOutputStream(), true);
 
             salida.println("LOGIN|" + miUsuario);
-
             HiloCliente hiloEscucha = new HiloCliente(conexion.socket, this);
             new Thread(hiloEscucha).start();
 
@@ -65,9 +61,7 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 ventanaContactos = new VentanaContactos(miUsuario);
 
                 ventanaContactos.setContactoListener(contactoSeleccionado -> {
-                    if (!contactoSeleccionado.equals(miUsuario)) {
-                        abrirVentanaChat(contactoSeleccionado);
-                    }
+                    if (!contactoSeleccionado.equals(miUsuario)) abrirVentanaChat(contactoSeleccionado);
                 });
 
                 ventanaContactos.setGrupoListener(new VentanaContactos.GrupoListener() {
@@ -84,26 +78,17 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                         abrirVentanaChat(nombreGrupo);
                     }
                 });
-
                 ventanaContactos.setVisible(true);
             });
-
         } catch (IOException e) {
-            javax.swing.JOptionPane.showMessageDialog(ventanaPrincipal,
-                    "No se pudo conectar al servidor en " + ipDestino + ":" + puerto,
-                    "Error de Conexión", javax.swing.JOptionPane.ERROR_MESSAGE);
+            javax.swing.JOptionPane.showMessageDialog(ventanaPrincipal, "Error de Conexión", "Error", javax.swing.JOptionPane.ERROR_MESSAGE);
         }
     }
 
     private Color obtenerColorUsuario(String usuario) {
-        if (usuario.equalsIgnoreCase(miUsuario) || usuario.equalsIgnoreCase("Tú")) {
-            return new Color(80, 80, 80);
-        }
-
+        if (usuario.equalsIgnoreCase(miUsuario) || usuario.equalsIgnoreCase("Tú")) return new Color(80, 80, 80);
         if (!coloresUsuarios.containsKey(usuario.toLowerCase())) {
-            Color colorAsignado = listaColores[indiceColor % listaColores.length];
-            coloresUsuarios.put(usuario.toLowerCase(), colorAsignado);
-            indiceColor++;
+            coloresUsuarios.put(usuario.toLowerCase(), listaColores[indiceColor++ % listaColores.length]);
         }
         return coloresUsuarios.get(usuario.toLowerCase());
     }
@@ -112,20 +97,14 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
         SwingUtilities.invokeLater(() -> {
             if (ventanaContactos != null) {
                 java.util.List<String> listaFiltrada = new java.util.ArrayList<>();
-                for (String u : usuarios) {
-                    if (!u.equals(this.miUsuario) && !u.trim().isEmpty()) {
-                        listaFiltrada.add(u);
-                    }
-                }
+                for (String u : usuarios) if (!u.equals(this.miUsuario) && !u.trim().isEmpty()) listaFiltrada.add(u);
                 ventanaContactos.actualizarLista(listaFiltrada.toArray(new String[0]));
             }
         });
     }
 
     public void actualizarListaGrupos(String[] grupos) {
-        SwingUtilities.invokeLater(() -> {
-            if (ventanaContactos != null) ventanaContactos.actualizarListaGrupos(grupos);
-        });
+        SwingUtilities.invokeLater(() -> { if (ventanaContactos != null) ventanaContactos.actualizarListaGrupos(grupos); });
     }
 
     private void abrirVentanaChat(String nombreDestino) {
@@ -135,64 +114,85 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             chat = new VentanaChat(nombreDestino);
             VentanaChat ventanaActual = chat;
 
-            // Carga del historial analizando si el mensaje recuperado es texto plano o un Base64 de Imagen
+            // Carga correcta del historial incluyendo Imágenes y Archivos
             java.util.List<HistorialChat.Mensaje> historial = HistorialChat.cargarHistorial(miUsuario, nombreDestino);
             for (HistorialChat.Mensaje msg : historial) {
                 String remitente = msg.getRemitente();
-                if (remitente == null || remitente.isEmpty()) {
-                    remitente = nombreDestino;
-                }
+                if (remitente == null || remitente.isEmpty()) remitente = nombreDestino;
                 Color colorRemitente = obtenerColorUsuario(remitente);
                 String textoMsg = msg.getTexto();
 
-                if (textoMsg != null && textoMsg.startsWith("[IMAGEN]")) {
-                    String base64 = textoMsg.substring(8);
-                    ImageIcon imagenRecibida = ConversorImagen.base64ToImageIcon(base64);
-                    if (imagenRecibida != null) {
-                        ventanaActual.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
+                if (textoMsg != null) {
+                    if (textoMsg.startsWith("[ARCHIVO]")) {
+                        String contenido = textoMsg.substring(9);
+                        int divisor = contenido.indexOf("<::>");
+                        if (divisor != -1) {
+                            String nombreArchivo = contenido.substring(0, divisor);
+                            String base64 = contenido.substring(divisor + 4);
+                            ventanaActual.mostrarBotonDescargaArchivo(remitente, nombreArchivo, base64, colorRemitente);
+                        }
+                    } else if (textoMsg.startsWith("[IMAGEN]")) {
+                        String base64 = textoMsg.substring(8);
+                        ImageIcon imagenRecibida = ConversorImagen.base64ToImageIcon(base64);
+                        if (imagenRecibida != null) {
+                            ventanaActual.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
+                        } else {
+                            ventanaActual.mostrarMensajeConColor(remitente, "[Error de imagen]", colorRemitente);
+                        }
                     } else {
-                        ventanaActual.mostrarMensajeConColor(remitente, "[Error de imagen]", colorRemitente);
+                        ventanaActual.mostrarMensajeConColor(remitente, textoMsg, colorRemitente);
                     }
-                } else {
-                    ventanaActual.mostrarMensajeConColor(remitente, textoMsg, colorRemitente);
                 }
             }
 
-            // ACCIÓN: ENVIAR TEXTO
             chat.setAccionEnviar(e -> {
                 String mensaje = ventanaActual.getMensajeEscrito();
                 if (mensaje.trim().isEmpty()) return;
-
                 String mensajeCodificado = mensaje.replace("\n", "<BR>");
 
-                if (misGrupos.contains(nombreDestino)) {
-                    salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
-                } else {
-                    salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
-                }
+                if (misGrupos.contains(nombreDestino)) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
 
                 HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensaje);
-                Color colorTu = obtenerColorUsuario("Tú");
-                ventanaActual.mostrarMensajeConColor("Tú", mensaje, colorTu);
+                ventanaActual.mostrarMensajeConColor("Tú", mensaje, obtenerColorUsuario("Tú"));
                 ventanaActual.limpiarInput();
             });
 
-            // ACCIÓN: ENVIAR IMAGEN
-            chat.setOnImagenSeleccionada(imagenIcon -> {
-                String imagenEnTexto = ConversorImagen.imageIconToBase64(imagenIcon);
-                if (imagenEnTexto != null) {
-                    String mensajeCodificado = "[IMAGEN]" + imagenEnTexto;
+            // ENVIAR IMAGEN
+            chat.setOnImagenSeleccionada(archivoImagen -> {
+                try {
+                    // Garantizamos que las dimensiones se capturen correctamente
+                    java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(archivoImagen);
+                    if (img != null) {
+                        ImageIcon imagenIcon = new ImageIcon(img);
+                        String imagenEnTexto = ConversorImagen.imageIconToBase64(imagenIcon);
 
-                    if (misGrupos.contains(nombreDestino)) {
-                        salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
-                    } else {
-                        salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
+                        if (imagenEnTexto != null) {
+                            String mensajeCodificado = "[IMAGEN]" + imagenEnTexto;
+                            if (misGrupos.contains(nombreDestino)) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                            else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
+
+                            // Guardamos la base64 real en el historial para que persista
+                            HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensajeCodificado);
+                            ventanaActual.mostrarImagenConColor("Tú", imagenIcon, obtenerColorUsuario("Tú"));
+                        }
                     }
+                } catch (Exception ex) { ex.printStackTrace(); }
+            });
 
-                    // Se almacena la imagen encriptada en base64 en la BD/Archivo del historial local
+            // ENVIAR DOCUMENTO
+            chat.setOnArchivoSeleccionado(archivo -> {
+                String base64 = ManejadorArchivos.archivoToBase64(archivo);
+                if (base64 != null) {
+                    String nombreArchivo = archivo.getName();
+                    String mensajeCodificado = "[ARCHIVO]" + nombreArchivo + "<::>" + base64;
+
+                    if (misGrupos.contains(nombreDestino)) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                    else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
+
+                    // Guardamos la base64 completa en el historial para que el botón se pueda re-dibujar
                     HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensajeCodificado);
-                    Color colorTu = obtenerColorUsuario("Tú");
-                    ventanaActual.mostrarImagenConColor("Tú", imagenIcon, colorTu);
+                    ventanaActual.mostrarBotonDescargaArchivo("Tú", nombreArchivo, base64, obtenerColorUsuario("Tú"));
                 }
             });
 
@@ -209,12 +209,21 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             VentanaChat chat = chatsAbiertos.get(remitente);
             Color colorRemitente = obtenerColorUsuario(remitente);
 
-            if (mensaje.startsWith("[IMAGEN]")) {
+            if (mensaje.startsWith("[ARCHIVO]")) {
+                String contenido = mensaje.substring(9);
+                int divisor = contenido.indexOf("<::>");
+                if (divisor != -1) {
+                    String nombreArchivo = contenido.substring(0, divisor);
+                    String base64 = contenido.substring(divisor + 4);
+
+                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje); // Guarda Base64 real
+                    chat.mostrarBotonDescargaArchivo(remitente, nombreArchivo, base64, colorRemitente);
+                }
+            } else if (mensaje.startsWith("[IMAGEN]")) {
                 String base64 = mensaje.substring(8);
                 ImageIcon imagenRecibida = ConversorImagen.base64ToImageIcon(base64);
                 if (imagenRecibida != null) {
-                    // Guarda la imagen cifrada completa para restaurarla al reabrir
-                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje);
+                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje); // Guarda Base64 real
                     chat.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
                 }
             } else {
@@ -232,12 +241,21 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             VentanaChat chat = chatsAbiertos.get(grupo);
             Color colorRemitente = obtenerColorUsuario(remitente);
 
-            if (mensaje.startsWith("[IMAGEN]")) {
+            if (mensaje.startsWith("[ARCHIVO]")) {
+                String contenido = mensaje.substring(9);
+                int divisor = contenido.indexOf("<::>");
+                if (divisor != -1) {
+                    String nombreArchivo = contenido.substring(0, divisor);
+                    String base64 = contenido.substring(divisor + 4);
+
+                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje); // Guarda Base64 real
+                    chat.mostrarBotonDescargaArchivo(remitente, nombreArchivo, base64, colorRemitente);
+                }
+            } else if (mensaje.startsWith("[IMAGEN]")) {
                 String base64 = mensaje.substring(8);
                 ImageIcon imagenRecibida = ConversorImagen.base64ToImageIcon(base64);
                 if (imagenRecibida != null) {
-                    // Guarda la imagen cifrada completa para restaurarla al reabrir
-                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje);
+                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje); // Guarda Base64 real
                     chat.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
                 }
             } else {

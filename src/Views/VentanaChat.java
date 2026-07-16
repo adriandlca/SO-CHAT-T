@@ -3,6 +3,7 @@ package Views;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
@@ -14,7 +15,8 @@ public class VentanaChat extends JFrame {
     private JPanel panelContenedorMensajes;
     private JScrollPane scrollLectura;
 
-    private java.util.function.Consumer<ImageIcon> accionEnviarImagen;
+    private java.util.function.Consumer<File> accionEnviarImagen;
+    private java.util.function.Consumer<File> accionEnviarArchivo;
 
     public VentanaChat(String contactoDestino) {
         super("Chat: " + contactoDestino);
@@ -52,13 +54,21 @@ public class VentanaChat extends JFrame {
         btnAbrirEmojis.setFocusable(false);
         btnAbrirEmojis.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-        // Botón con el clip vectorial dibujado de forma nativa
-        JButton btnAdjuntar = new JButton(new ClipIcon());
-        btnAdjuntar.setToolTipText("Adjuntar Imagen");
-        btnAdjuntar.setBackground(Color.WHITE);
-        btnAdjuntar.setBorder(new EmptyBorder(4, 4, 4, 8));
-        btnAdjuntar.setFocusable(false);
-        btnAdjuntar.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        // Botón de IMAGEN con Icono Vectorial
+        JButton btnAdjuntarImagen = new JButton(new FotoIcon());
+        btnAdjuntarImagen.setToolTipText("Adjuntar Imagen");
+        btnAdjuntarImagen.setBackground(Color.WHITE);
+        btnAdjuntarImagen.setBorder(new EmptyBorder(4, 6, 4, 6));
+        btnAdjuntarImagen.setFocusable(false);
+        btnAdjuntarImagen.setCursor(new Cursor(Cursor.HAND_CURSOR));
+
+        // Botón de ARCHIVO con Icono Vectorial de CLIP
+        JButton btnAdjuntarArchivo = new JButton(new ClipIcon());
+        btnAdjuntarArchivo.setToolTipText("Adjuntar Documento");
+        btnAdjuntarArchivo.setBackground(Color.WHITE);
+        btnAdjuntarArchivo.setBorder(new EmptyBorder(4, 4, 4, 8));
+        btnAdjuntarArchivo.setFocusable(false);
+        btnAdjuntarArchivo.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
         jbtnEnviar = new JButton("Enviar");
         jbtnEnviar.setFont(new Font("Segoe UI", Font.BOLD, 13));
@@ -89,28 +99,22 @@ public class VentanaChat extends JFrame {
             menu.show(btnAbrirEmojis, 0, -menu.getPreferredSize().height - 5);
         });
 
-        btnAdjuntar.addActionListener(e -> {
+        btnAdjuntarImagen.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Selecciona una Imagen para enviar");
             fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                    "Imágenes (JPG, PNG, GIF)", "jpg", "jpeg", "png", "gif"
+                    "Imágenes (JPG, PNG)", "jpg", "jpeg", "png"
             ));
-
             if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                try {
-                    java.io.File archivo = fileChooser.getSelectedFile();
-                    // Carga síncrona real para evitar que las dimensiones de la imagen retornen -1
-                    java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(archivo);
-                    if (img != null) {
-                        ImageIcon imgIcon = new ImageIcon(img);
-                        if (accionEnviarImagen != null) {
-                            accionEnviarImagen.accept(imgIcon);
-                        }
-                    }
-                } catch (Exception ex) {
-                    ex.printStackTrace();
-                    JOptionPane.showMessageDialog(this, "Error al cargar el archivo de imagen.", "Error", JOptionPane.ERROR_MESSAGE);
-                }
+                if (accionEnviarImagen != null) accionEnviarImagen.accept(fileChooser.getSelectedFile());
+            }
+        });
+
+        btnAdjuntarArchivo.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Selecciona un Documento para enviar");
+            if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
+                if (accionEnviarArchivo != null) accionEnviarArchivo.accept(fileChooser.getSelectedFile());
             }
         });
 
@@ -120,7 +124,8 @@ public class VentanaChat extends JFrame {
         JPanel panelHerramientas = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
         panelHerramientas.setBackground(Color.WHITE);
         panelHerramientas.add(btnAbrirEmojis);
-        panelHerramientas.add(btnAdjuntar);
+        panelHerramientas.add(btnAdjuntarImagen);
+        panelHerramientas.add(btnAdjuntarArchivo);
 
         JPanel wrapperAuxiliares = new JPanel(new BorderLayout());
         wrapperAuxiliares.setBackground(Color.WHITE);
@@ -137,8 +142,7 @@ public class VentanaChat extends JFrame {
         panelFilaMensaje.add(panelBotones, BorderLayout.EAST);
 
         this.add(panelFilaMensaje, BorderLayout.SOUTH);
-
-        this.setSize(460, 520);
+        this.setSize(480, 520);
         this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         this.setLocationRelativeTo(null);
     }
@@ -153,7 +157,6 @@ public class VentanaChat extends JFrame {
         ));
 
         String[] emojis = {"😀", "😂", "😊", "😍", "🤔", "😥", "😡", "👍", "🙌", "🔥", "🎉", "❤️"};
-
         for (String emoji : emojis) {
             JButton btnEmoji = new JButton(emoji);
             btnEmoji.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
@@ -161,13 +164,6 @@ public class VentanaChat extends JFrame {
             btnEmoji.setBorder(new EmptyBorder(2, 2, 2, 2));
             btnEmoji.setFocusable(false);
             btnEmoji.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            btnEmoji.setHorizontalAlignment(SwingConstants.CENTER);
-            btnEmoji.setMargin(new Insets(0, 0, 0, 0));
-
-            btnEmoji.addMouseListener(new java.awt.event.MouseAdapter() {
-                public void mouseEntered(java.awt.event.MouseEvent evt) { btnEmoji.setBackground(new Color(241, 245, 249)); }
-                public void mouseExited(java.awt.event.MouseEvent evt) { btnEmoji.setBackground(Color.WHITE); }
-            });
 
             btnEmoji.addActionListener(e -> {
                 taInputMensaje.append(emoji);
@@ -202,11 +198,54 @@ public class VentanaChat extends JFrame {
         desplazarScrollAlFinal();
     }
 
-    private void desplazarScrollAlFinal() {
-        SwingUtilities.invokeLater(() -> {
-            JScrollBar vertical = scrollLectura.getVerticalScrollBar();
-            vertical.setValue(vertical.getMaximum());
+    public void mostrarBotonDescargaArchivo(String remitente, String nombreArchivo, String base64, Color colorRemitente) {
+        String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
+        boolean esMio = nombreLimpio.equals("Tú");
+
+        JPanel panelAlineador = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        panelAlineador.setOpaque(false);
+
+        JPanel panelCaja = new JPanel(new BorderLayout(5, 5));
+        panelCaja.setBackground(Color.WHITE);
+        panelCaja.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(new Color(203, 213, 225), 1, true),
+                new EmptyBorder(8, 12, 8, 12)
+        ));
+
+        JLabel lblNombre = new JLabel(nombreLimpio);
+        lblNombre.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        lblNombre.setForeground(colorRemitente);
+
+        JButton btnDescargar = new JButton("⬇️ " + nombreArchivo);
+        btnDescargar.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        btnDescargar.setBackground(new Color(241, 245, 249));
+        btnDescargar.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnDescargar.setFocusable(false);
+
+        btnDescargar.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Guardar archivo como...");
+            fileChooser.setSelectedFile(new File(nombreArchivo));
+
+            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File destino = fileChooser.getSelectedFile();
+                if (ManejadorArchivos.guardarArchivoManual(base64, destino)) {
+                    JOptionPane.showMessageDialog(this,
+                            "Archivo guardado exitosamente en:\n" + destino.getAbsolutePath(),
+                            "Descarga Completada",
+                            JOptionPane.INFORMATION_MESSAGE);
+                }
+            }
         });
+
+        panelCaja.add(lblNombre, BorderLayout.NORTH);
+        panelCaja.add(btnDescargar, BorderLayout.CENTER);
+        panelAlineador.add(panelCaja);
+
+        panelContenedorMensajes.add(panelAlineador);
+        panelContenedorMensajes.revalidate();
+        panelContenedorMensajes.repaint();
+        desplazarScrollAlFinal();
     }
 
     public void mostrarMensajePlano(String textoAnterior) {
@@ -215,37 +254,34 @@ public class VentanaChat extends JFrame {
         textoHistorial.setOpaque(false);
         textoHistorial.setForeground(new Color(71, 85, 105));
         textoHistorial.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-
         JPanel panelAlineador = new JPanel(new FlowLayout(FlowLayout.CENTER));
         panelAlineador.setOpaque(false);
         panelAlineador.add(textoHistorial);
-
         panelContenedorMensajes.add(panelAlineador);
     }
 
-    public void setOnImagenSeleccionada(java.util.function.Consumer<ImageIcon> accion) {
-        this.accionEnviarImagen = accion;
+    private void desplazarScrollAlFinal() {
+        SwingUtilities.invokeLater(() -> {
+            JScrollBar vertical = scrollLectura.getVerticalScrollBar();
+            vertical.setValue(vertical.getMaximum());
+        });
     }
 
+    public void setOnImagenSeleccionada(java.util.function.Consumer<File> accion) { this.accionEnviarImagen = accion; }
+    public void setOnArchivoSeleccionado(java.util.function.Consumer<File> accion) { this.accionEnviarArchivo = accion; }
     public String getMensajeEscrito() { return taInputMensaje.getText(); }
     public void limpiarInput() { taInputMensaje.setText(""); taInputMensaje.requestFocus(); }
     public void setAccionEnviar(ActionListener accion) { jbtnEnviar.addActionListener(accion); }
 
-    // CLASE INTERNA: Dibuja un Clip elegante de forma vectorial (Evita depender de emojis del OS)
+    // --- ICONOS VECTORIALES (GARANTIZAN COMPATIBILIDAD) ---
     private static class ClipIcon implements Icon {
-        private final int width = 18;
-        private final int height = 18;
-
         @Override
         public void paintIcon(Component c, Graphics g, int x, int y) {
             Graphics2D g2 = (Graphics2D) g.create();
             g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(71, 85, 105)); // Gris slate oscuro y elegante
+            g2.setColor(new Color(71, 85, 105));
             g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-
             g2.translate(x, y);
-
-            // Trazado del clip
             g2.drawLine(12, 5, 12, 13);
             g2.drawArc(4, 9, 8, 8, 180, 180);
             g2.drawLine(4, 13, 4, 5);
@@ -253,13 +289,29 @@ public class VentanaChat extends JFrame {
             g2.drawLine(10, 5, 10, 11);
             g2.drawArc(6, 9, 4, 4, 180, 180);
             g2.drawLine(6, 11, 6, 7);
-
             g2.dispose();
         }
+        @Override public int getIconWidth() { return 18; }
+        @Override public int getIconHeight() { return 18; }
+    }
 
+    private static class FotoIcon implements Icon {
         @Override
-        public int getIconWidth() { return width; }
-        @Override
-        public int getIconHeight() { return height; }
+        public void paintIcon(Component c, Graphics g, int x, int y) {
+            Graphics2D g2 = (Graphics2D) g.create();
+            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+            g2.setColor(new Color(71, 85, 105));
+            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
+            g2.translate(x, y);
+            g2.drawRoundRect(2, 3, 14, 12, 2, 2);
+            g2.drawOval(5, 6, 3, 3);
+            g2.drawLine(2, 12, 7, 7);
+            g2.drawLine(7, 7, 11, 11);
+            g2.drawLine(10, 10, 12, 8);
+            g2.drawLine(12, 8, 16, 12);
+            g2.dispose();
+        }
+        @Override public int getIconWidth() { return 18; }
+        @Override public int getIconHeight() { return 18; }
     }
 }
