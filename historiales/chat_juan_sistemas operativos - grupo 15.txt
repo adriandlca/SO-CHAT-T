@@ -1,0 +1,7 @@
+[2026-07-04 20:21:10] Tú: Hola
+[2026-07-04 20:21:37] Tú: Saben para cuando es la tarea de SO?
+[2026-07-04 20:22:00] Adrian: Es para la siguiente semana
+[2026-07-04 20:22:22] Milagros: Si, es para semana 15
+[2026-07-04 20:22:37] Tú: Me podrian explicar de que trata?
+[2026-07-04 20:23:23] Adrian: Si, mas tarde les explico de que trata
+[2026-07-04 20:24:30] Milagros: Mejor para que haya dudas

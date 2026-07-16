@@ -1,0 +1,10 @@
+[2026-07-15 23:55:31] Pepe: hola
+[2026-07-15 23:55:36] Mlagros: hola
+[2026-07-15 23:55:38] Adrian: hola
+[2026-07-15 23:55:40] Tú: hopla
+[2026-07-15 23:55:48] Pepe: hasta aqui llego, adios
+[2026-07-15 23:56:35] Mlagros: hola
+[2026-07-15 23:56:42] Mlagros: jeje
+[2026-07-15 23:57:22] Mlagros: soy el rojo
+[2026-07-15 23:57:28] Adrian: yo el azul
+[2026-07-15 23:57:32] Tú: hola

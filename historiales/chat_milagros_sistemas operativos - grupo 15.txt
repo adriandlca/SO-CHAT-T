@@ -1,0 +1,7 @@
+[2026-07-04 20:21:10] Juan: Hola
+[2026-07-04 20:21:37] Juan: Saben para cuando es la tarea de SO?
+[2026-07-04 20:22:00] Adrian: Es para la siguiente semana
+[2026-07-04 20:22:22] Tú: Si, es para semana 15
+[2026-07-04 20:22:37] Juan: Me podrian explicar de que trata?
+[2026-07-04 20:23:23] Adrian: Si, mas tarde les explico de que trata
+[2026-07-04 20:24:30] Tú: Mejor para que haya dudas

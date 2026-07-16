@@ -1,0 +1,8 @@
+[2026-07-15 23:50:58] Tú: hola
+[2026-07-15 23:51:05] Adrian: hola que tal, me llamo adrian
+[2026-07-15 23:51:08] Tú: y yo pepe
+[2026-07-15 23:51:14] Adrian: jeje
+[2026-07-15 23:51:40] Adrian: hola soy adrian
+[2026-07-15 23:51:44] Tú: hola soy pepe de nuevo
+[2026-07-15 23:51:47] Adrian: que tal
+[2026-07-15 23:52:05] Tú: jeje

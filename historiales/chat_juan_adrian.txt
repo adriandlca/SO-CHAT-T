@@ -1,0 +1,6 @@
+[2026-07-04 20:09:26] Tú: Hola Adrian, como estas?
+[2026-07-04 20:09:32] Adrian: Hola Juan
+[2026-07-04 20:09:39] Adrian: Me encuentro bien
+[2026-07-04 20:10:20] Tú: Sabes si dejaron tarea en Estadistica?
+[2026-07-04 20:10:34] Adrian: Para esta semana no hay tarea
+[2026-07-04 20:10:44] Tú: Bueno, gracias
