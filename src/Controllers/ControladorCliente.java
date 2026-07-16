@@ -61,21 +61,27 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 ventanaContactos = new VentanaContactos(miUsuario);
 
                 ventanaContactos.setContactoListener(contactoSeleccionado -> {
-                    if (!contactoSeleccionado.equals(miUsuario)) abrirVentanaChat(contactoSeleccionado);
+                    if (!contactoSeleccionado.equals(miUsuario)) abrirVentanaChat(contactoSeleccionado, false);
                 });
 
                 ventanaContactos.setGrupoListener(new VentanaContactos.GrupoListener() {
                     @Override
-                    public void onCrearGrupo(String nombreGrupo) {
+                    public void onCrearGrupo(String nombreGrupo, String contrasena) {
+                        if (contrasena != null && !contrasena.isEmpty()) {
+                            salida.println("CREAR_GRUPO|" + nombreGrupo + "|" + contrasena);
+                        } else {
+                            salida.println("CREAR_GRUPO|" + nombreGrupo);
+                        }
                         misGrupos.add(nombreGrupo);
-                        salida.println("CREAR_GRUPO|" + nombreGrupo);
-                        abrirVentanaChat(nombreGrupo);
+                        abrirVentanaChat(nombreGrupo, true);
                     }
                     @Override
-                    public void onUnirseGrupo(String nombreGrupo) {
-                        misGrupos.add(nombreGrupo);
-                        salida.println("UNIRSE_GRUPO|" + nombreGrupo);
-                        abrirVentanaChat(nombreGrupo);
+                    public void onUnirseGrupo(String nombreGrupo, String contrasena) {
+                        if (contrasena != null && !contrasena.isEmpty()) {
+                            salida.println("UNIRSE_GRUPO|" + nombreGrupo + "|" + contrasena);
+                        } else {
+                            salida.println("UNIRSE_GRUPO|" + nombreGrupo);
+                        }
                     }
                 });
                 ventanaContactos.setVisible(true);
@@ -93,6 +99,14 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
         return coloresUsuarios.get(usuario.toLowerCase());
     }
 
+    /**
+     * Genera la clave interna del caché de ventanas de chat, prefijada por tipo
+     * para que un contacto y un grupo con el mismo nombre no compartan ventana.
+     */
+    private String claveChat(String nombreDestino, boolean esGrupo) {
+        return (esGrupo ? "grupo_" : "priv_") + nombreDestino;
+    }
+
     public void actualizarListaContactos(String[] usuarios) {
         SwingUtilities.invokeLater(() -> {
             if (ventanaContactos != null) {
@@ -107,15 +121,44 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
         SwingUtilities.invokeLater(() -> { if (ventanaContactos != null) ventanaContactos.actualizarListaGrupos(grupos); });
     }
 
-    private void abrirVentanaChat(String nombreDestino) {
-        VentanaChat chat = chatsAbiertos.get(nombreDestino);
+    public void actualizarGruposPrivados(String[] gruposPrivados) {
+        SwingUtilities.invokeLater(() -> { if (ventanaContactos != null) ventanaContactos.actualizarGruposPrivados(gruposPrivados); });
+    }
+
+    public void grupoUnidoExitosamente(String nombreGrupo) {
+        SwingUtilities.invokeLater(() -> {
+            misGrupos.add(nombreGrupo);
+            abrirVentanaChat(nombreGrupo, true);
+        });
+    }
+
+    public void errorUnirseGrupo(String nombreGrupo, String mensaje) {
+        SwingUtilities.invokeLater(() -> {
+            javax.swing.JOptionPane.showMessageDialog(
+                    ventanaContactos,
+                    mensaje,
+                    "No se pudo unir a '" + nombreGrupo + "'",
+                    javax.swing.JOptionPane.ERROR_MESSAGE
+            );
+        });
+    }
+
+    /**
+     * Abre (o reutiliza) la ventana de chat para un destino concreto.
+     * @param esGrupo true si el destino es un grupo, false si es un contacto.
+     *                Esto determina tanto la clave del caché como el archivo
+     *                de historial y la ruta de envío (MSG vs GRUPOMSG, etc.).
+     */
+    private void abrirVentanaChat(String nombreDestino, boolean esGrupo) {
+        String clave = claveChat(nombreDestino, esGrupo);
+        VentanaChat chat = chatsAbiertos.get(clave);
 
         if (chat == null || !chat.isVisible()) {
             chat = new VentanaChat(nombreDestino);
             VentanaChat ventanaActual = chat;
 
-            // Carga correcta del historial incluyendo Imágenes y Archivos
-            java.util.List<HistorialChat.Mensaje> historial = HistorialChat.cargarHistorial(miUsuario, nombreDestino);
+            // Cargamos historial desde el archivo según el tipo
+            java.util.List<HistorialChat.Mensaje> historial = HistorialChat.cargarHistorial(miUsuario, nombreDestino, esGrupo);
             for (HistorialChat.Mensaje msg : historial) {
                 String remitente = msg.getRemitente();
                 if (remitente == null || remitente.isEmpty()) remitente = nombreDestino;
@@ -145,8 +188,10 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 }
             }
 
+            final boolean esGrupoCapturado = esGrupo;
+
             chat.setAccionEscribiendo(escribiendo -> {
-                if (misGrupos.contains(nombreDestino)) {
+                if (esGrupoCapturado) {
                     String comando = escribiendo ? "GRUPO_ESCRIBIENDO" : "GRUPO_NO_ESCRIBIENDO";
                     salida.println(comando + "|" + nombreDestino);
                 } else {
@@ -160,18 +205,16 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 if (mensaje.trim().isEmpty()) return;
                 String mensajeCodificado = mensaje.replace("\n", "<BR>");
 
-                if (misGrupos.contains(nombreDestino)) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                if (esGrupoCapturado) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
                 else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
 
-                HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensaje);
+                HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensaje, esGrupoCapturado);
                 ventanaActual.mostrarMensajeConColor("Tú", mensaje, obtenerColorUsuario("Tú"));
                 ventanaActual.limpiarInput();
             });
 
-            // ENVIAR IMAGEN
             chat.setOnImagenSeleccionada(archivoImagen -> {
                 try {
-                    // Garantizamos que las dimensiones se capturen correctamente
                     java.awt.image.BufferedImage img = javax.imageio.ImageIO.read(archivoImagen);
                     if (img != null) {
                         ImageIcon imagenIcon = new ImageIcon(img);
@@ -179,34 +222,31 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
 
                         if (imagenEnTexto != null) {
                             String mensajeCodificado = "[IMAGEN]" + imagenEnTexto;
-                            if (misGrupos.contains(nombreDestino)) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                            if (esGrupoCapturado) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
                             else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
 
-                            // Guardamos la base64 real en el historial para que persista
-                            HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensajeCodificado);
+                            HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensajeCodificado, esGrupoCapturado);
                             ventanaActual.mostrarImagenConColor("Tú", imagenIcon, obtenerColorUsuario("Tú"));
                         }
                     }
                 } catch (Exception ex) { ex.printStackTrace(); }
             });
 
-            // ENVIAR DOCUMENTO
             chat.setOnArchivoSeleccionado(archivo -> {
                 String base64 = ManejadorArchivos.archivoToBase64(archivo);
                 if (base64 != null) {
                     String nombreArchivo = archivo.getName();
                     String mensajeCodificado = "[ARCHIVO]" + nombreArchivo + "<::>" + base64;
 
-                    if (misGrupos.contains(nombreDestino)) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
+                    if (esGrupoCapturado) salida.println("GRUPOMSG|" + nombreDestino + "|" + mensajeCodificado);
                     else salida.println("MSG|" + nombreDestino + "|" + mensajeCodificado);
 
-                    // Guardamos la base64 completa en el historial para que el botón se pueda re-dibujar
-                    HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensajeCodificado);
+                    HistorialChat.guardarMensaje(miUsuario, nombreDestino, "Tú", mensajeCodificado, esGrupoCapturado);
                     ventanaActual.mostrarBotonDescargaArchivo("Tú", nombreArchivo, base64, obtenerColorUsuario("Tú"));
                 }
             });
 
-            chatsAbiertos.put(nombreDestino, chat);
+            chatsAbiertos.put(clave, chat);
             chat.setVisible(true);
         } else {
             chat.toFront();
@@ -215,11 +255,10 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
 
     public void recibirMensaje(String remitente, String mensaje) {
         SwingUtilities.invokeLater(() -> {
-            abrirVentanaChat(remitente);
-            VentanaChat chat = chatsAbiertos.get(remitente);
+            abrirVentanaChat(remitente, false); // privado
+            VentanaChat chat = chatsAbiertos.get(claveChat(remitente, false));
             Color colorRemitente = obtenerColorUsuario(remitente);
 
-            // Al llegar un mensaje, apagamos el estado "escribiendo..." del remitente
             if (chat != null) chat.mostrarEscribiendo(false);
 
             if (mensaje.startsWith("[ARCHIVO]")) {
@@ -229,19 +268,19 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                     String nombreArchivo = contenido.substring(0, divisor);
                     String base64 = contenido.substring(divisor + 4);
 
-                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje); // Guarda Base64 real
+                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje, false);
                     chat.mostrarBotonDescargaArchivo(remitente, nombreArchivo, base64, colorRemitente);
                 }
             } else if (mensaje.startsWith("[IMAGEN]")) {
                 String base64 = mensaje.substring(8);
                 ImageIcon imagenRecibida = ConversorImagen.base64ToImageIcon(base64);
                 if (imagenRecibida != null) {
-                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje); // Guarda Base64 real
+                    HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensaje, false);
                     chat.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
                 }
             } else {
                 String mensajeDecodificado = mensaje.replace("<BR>", "\n");
-                HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensajeDecodificado);
+                HistorialChat.guardarMensaje(miUsuario, remitente, remitente, mensajeDecodificado, false);
                 chat.mostrarMensajeConColor(remitente, mensajeDecodificado, colorRemitente);
             }
         });
@@ -250,11 +289,10 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
     public void recibirMensajeGrupal(String grupo, String remitente, String mensaje) {
         SwingUtilities.invokeLater(() -> {
             misGrupos.add(grupo);
-            abrirVentanaChat(grupo);
-            VentanaChat chat = chatsAbiertos.get(grupo);
+            abrirVentanaChat(grupo, true); // grupal
+            VentanaChat chat = chatsAbiertos.get(claveChat(grupo, true));
             Color colorRemitente = obtenerColorUsuario(remitente);
 
-            // Al llegar un mensaje, apagamos el estado "escribiendo..." de este usuario en el grupo
             if (chat != null) chat.mostrarEscribiendoGrupal(remitente, false);
 
             if (mensaje.startsWith("[ARCHIVO]")) {
@@ -264,19 +302,19 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                     String nombreArchivo = contenido.substring(0, divisor);
                     String base64 = contenido.substring(divisor + 4);
 
-                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje); // Guarda Base64 real
+                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje, true);
                     chat.mostrarBotonDescargaArchivo(remitente, nombreArchivo, base64, colorRemitente);
                 }
             } else if (mensaje.startsWith("[IMAGEN]")) {
                 String base64 = mensaje.substring(8);
                 ImageIcon imagenRecibida = ConversorImagen.base64ToImageIcon(base64);
                 if (imagenRecibida != null) {
-                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje); // Guarda Base64 real
+                    HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensaje, true);
                     chat.mostrarImagenConColor(remitente, imagenRecibida, colorRemitente);
                 }
             } else {
                 String mensajeDecodificado = mensaje.replace("<BR>", "\n");
-                HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensajeDecodificado);
+                HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensajeDecodificado, true);
                 chat.mostrarMensajeConColor(remitente, mensajeDecodificado, colorRemitente);
             }
         });
@@ -284,7 +322,7 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
 
     public void recibirEstadoEscribiendo(String remitente, boolean escribiendo) {
         SwingUtilities.invokeLater(() -> {
-            VentanaChat chat = chatsAbiertos.get(remitente);
+            VentanaChat chat = chatsAbiertos.get(claveChat(remitente, false));
             if (chat != null && chat.isVisible()) {
                 chat.mostrarEscribiendo(escribiendo);
             }
@@ -293,7 +331,7 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
 
     public void recibirEstadoEscribiendoGrupal(String grupo, String remitente, boolean escribiendo) {
         SwingUtilities.invokeLater(() -> {
-            VentanaChat chat = chatsAbiertos.get(grupo);
+            VentanaChat chat = chatsAbiertos.get(claveChat(grupo, true));
             if (chat != null && chat.isVisible()) {
                 chat.mostrarEscribiendoGrupal(remitente, escribiendo);
             }

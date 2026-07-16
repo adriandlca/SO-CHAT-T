@@ -11,9 +11,13 @@ public class ServidorCentral {
 
     // Diccionario seguro para múltiples hilos: [NombreUsuario -> Su Conexión Activa]
     private static ConcurrentHashMap<String, ManejadorCliente> clientesConectados = new ConcurrentHashMap<>();
-    
+
     // Diccionario para chats grupales: [NombreDelGrupo -> Lista de Nombres de Usuarios]
     private static ConcurrentHashMap<String, ArrayList<String>> gruposActivos = new ConcurrentHashMap<>();
+
+    // NUEVO: Diccionario de contraseñas para grupos privados.
+    // Si un grupo NO aparece en este mapa, es público. Si aparece, es privado.
+    private static ConcurrentHashMap<String, String> grupoContrasenas = new ConcurrentHashMap<>();
 
     public static void main(String[] args) {
         System.out.println("=========================================");
@@ -23,11 +27,9 @@ public class ServidorCentral {
 
         try (ServerSocket serverSocket = new ServerSocket(PUERTO)) {
             while (true) {
-                // El servidor se queda pausado aquí hasta que un cliente intente conectar
                 Socket socketCliente = serverSocket.accept();
                 System.out.println("[RED] Nueva conexión detectada desde IP: " + socketCliente.getInetAddress().getHostAddress());
 
-                // Delegamos a ese cliente a un trabajador (hilo) independiente
                 ManejadorCliente manejador = new ManejadorCliente(socketCliente);
                 new Thread(manejador).start();
             }
@@ -41,10 +43,10 @@ public class ServidorCentral {
     public static synchronized void registrarCliente(String usuario, ManejadorCliente manejador) {
         clientesConectados.put(usuario, manejador);
         System.out.println("[INFO] Usuario registrado: " + usuario);
-        // Avisamos a toda la red que alguien nuevo entró
         broadcastListaUsuarios();
-        // Le enviamos la lista de grupos activos al usuario que acaba de entrar
+        // Enviamos tanto la lista de grupos como la de grupos privados
         manejador.enviarPaquete(obtenerPaqueteGrupos());
+        manejador.enviarPaquete(obtenerPaqueteGruposPrivados());
     }
 
     public static synchronized void removerCliente(String usuario) {
@@ -56,18 +58,16 @@ public class ServidorCentral {
     }
 
     public static void enviarMensajePrivado(String remitente, String destinatario, String mensaje) {
-        // Buscamos si el destinatario está conectado
         ManejadorCliente manejadorDestino = clientesConectados.get(destinatario);
 
         if (manejadorDestino != null) {
             manejadorDestino.enviarPaquete("MSG|" + remitente + "|" + mensaje);
             System.out.println("[ENRUTAMIENTO] " + remitente + " -> " + destinatario);
         } else {
-            System.out.println("[ERROR] Mensaje perdido. " + destinatario + " no está offline.");
+            System.out.println("[ERROR] Mensaje perdido. " + destinatario + " no está online.");
         }
     }
 
-    // Reenvía el aviso "escribiendo" / "dejó de escribir" al chat privado correspondiente
     public static void enviarEstadoEscribiendo(String remitente, String destinatario, boolean escribiendo) {
         ManejadorCliente manejadorDestino = clientesConectados.get(destinatario);
         if (manejadorDestino != null) {
@@ -76,7 +76,6 @@ public class ServidorCentral {
         }
     }
 
-    // Reenvía el aviso "escribiendo" grupal a todos los integrantes excepto a quien escribe
     public static void enviarEstadoEscribiendoGrupal(String remitente, String nombreGrupo, boolean escribiendo) {
         ArrayList<String> miembros = gruposActivos.get(nombreGrupo);
         if (miembros != null) {
@@ -103,32 +102,72 @@ public class ServidorCentral {
 
     // --- MÉTODOS DE ENRUTAMIENTO Y GESTIÓN GRUPAL ---
 
-    public static synchronized void crearGrupo(String nombreGrupo, String creador) {
+    /**
+     * Crea un grupo. Si la contraseña es null o vacía, el grupo es público;
+     * en caso contrario se almacena y se considera privado.
+     */
+    public static synchronized void crearGrupo(String nombreGrupo, String creador, String contrasena) {
         if (!gruposActivos.containsKey(nombreGrupo)) {
             ArrayList<String> miembros = new ArrayList<>();
             miembros.add(creador);
             gruposActivos.put(nombreGrupo, miembros);
-            System.out.println("[GRUPOS] " + creador + " creó el grupo: " + nombreGrupo);
-            // Actualizamos a todos los clientes para que vean el nuevo grupo en la interfaz
+
+            boolean esPrivado = contrasena != null && !contrasena.isEmpty();
+            if (esPrivado) {
+                grupoContrasenas.put(nombreGrupo, contrasena);
+                System.out.println("[GRUPOS] " + creador + " creó el grupo PRIVADO: " + nombreGrupo);
+            } else {
+                System.out.println("[GRUPOS] " + creador + " creó el grupo PÚBLICO: " + nombreGrupo);
+            }
+
             broadcastListaGrupos();
         }
     }
 
-    public static synchronized void unirseGrupo(String nombreGrupo, String usuario) {
-        if (gruposActivos.containsKey(nombreGrupo)) {
-            ArrayList<String> miembros = gruposActivos.get(nombreGrupo);
-            if (!miembros.contains(usuario)) {
-                miembros.add(usuario);
-                System.out.println("[GRUPOS] " + usuario + " se unió a: " + nombreGrupo);
+    /**
+     * Une a un usuario a un grupo, validando la contraseña si el grupo es privado.
+     * Envía GRUPO_UNIDO en caso de éxito o ERROR_GRUPO en caso de fallo.
+     */
+    public static synchronized void unirseGrupo(String nombreGrupo, String usuario, String contrasena) {
+        ManejadorCliente cliente = clientesConectados.get(usuario);
+
+        if (!gruposActivos.containsKey(nombreGrupo)) {
+            if (cliente != null) {
+                cliente.enviarPaquete("ERROR_GRUPO|" + nombreGrupo + "|El grupo no existe");
+            }
+            return;
+        }
+
+        String contrasenaAlmacenada = grupoContrasenas.get(nombreGrupo);
+        if (contrasenaAlmacenada != null) {
+            if (contrasena == null || !contrasenaAlmacenada.equals(contrasena)) {
+                if (cliente != null) {
+                    cliente.enviarPaquete("ERROR_GRUPO|" + nombreGrupo + "|Contraseña incorrecta");
+                }
+                System.out.println("[GRUPOS] " + usuario + " intentó unirse a '" + nombreGrupo + "' con contraseña incorrecta");
+                return;
             }
         }
+
+        ArrayList<String> miembros = gruposActivos.get(nombreGrupo);
+        if (!miembros.contains(usuario)) {
+            miembros.add(usuario);
+            System.out.println("[GRUPOS] " + usuario + " se unió a: " + nombreGrupo);
+        }
+
+        if (cliente != null) {
+            cliente.enviarPaquete("GRUPO_UNIDO|" + nombreGrupo);
+        }
+    }
+
+    public static boolean esGrupoPrivado(String nombreGrupo) {
+        return grupoContrasenas.containsKey(nombreGrupo);
     }
 
     public static void enviarMensajeGrupal(String remitente, String nombreGrupo, String mensaje) {
         ArrayList<String> miembros = gruposActivos.get(nombreGrupo);
         if (miembros != null) {
             for (String miembro : miembros) {
-                // No rebotamos el mensaje al mismo que lo envió
                 if (!miembro.equals(remitente)) {
                     ManejadorCliente manejadorDestino = clientesConectados.get(miembro);
                     if (manejadorDestino != null) {
@@ -142,13 +181,20 @@ public class ServidorCentral {
 
     private static synchronized void broadcastListaGrupos() {
         String paquete = obtenerPaqueteGrupos();
+        String paquetePrivados = obtenerPaqueteGruposPrivados();
         for (ManejadorCliente cliente : clientesConectados.values()) {
             cliente.enviarPaquete(paquete);
+            cliente.enviarPaquete(paquetePrivados);
         }
     }
 
     private static String obtenerPaqueteGrupos() {
         if (gruposActivos.isEmpty()) return "LISTA_GRUPOS|";
         return "LISTA_GRUPOS|" + String.join(",", gruposActivos.keySet());
+    }
+
+    private static String obtenerPaqueteGruposPrivados() {
+        if (grupoContrasenas.isEmpty()) return "LISTA_GRUPOS_PRIVADOS|";
+        return "LISTA_GRUPOS_PRIVADOS|" + String.join(",", grupoContrasenas.keySet());
     }
 }

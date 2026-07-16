@@ -43,11 +43,15 @@ public class ManejadorCliente implements Runnable {
                     
                 } else if (comando.equals("CREAR_GRUPO") && partes.length >= 2) {
                     String nombreGrupo = partes[1];
-                    ServidorCentral.crearGrupo(nombreGrupo, miUsuario);
+                    // Si viene una tercera parte, es la contraseña (grupo privado)
+                    String contrasena = partes.length >= 3 ? partes[2] : null;
+                    ServidorCentral.crearGrupo(nombreGrupo, miUsuario, contrasena);
 
                 } else if (comando.equals("UNIRSE_GRUPO") && partes.length >= 2) {
                     String nombreGrupo = partes[1];
-                    ServidorCentral.unirseGrupo(nombreGrupo, miUsuario);
+                    // Si el grupo es privado, la tercera parte trae la contraseña
+                    String contrasena = partes.length >= 3 ? partes[2] : null;
+                    ServidorCentral.unirseGrupo(nombreGrupo, miUsuario, contrasena);
 
                 } else if (comando.equals("GRUPOMSG") && partes.length == 3) {
                     String nombreGrupo = partes[1];

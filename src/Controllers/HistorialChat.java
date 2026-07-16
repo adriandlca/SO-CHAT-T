@@ -13,23 +13,29 @@ import java.util.List;
 
 public class HistorialChat {
 
-    public static void guardarMensaje(String miUsuario, String contacto, String remitente, String mensaje) {
+    /**
+     * Guarda un mensaje en el archivo de historial.
+     * @param esGrupo indica si el chat es grupal. Si es true usa chat_grupo_*.txt,
+     *                si es false usa chat_priv_*.txt. Esto evita que el historial
+     *                de un contacto y un grupo con el mismo nombre se mezclen.
+     */
+    public static void guardarMensaje(String miUsuario, String contacto, String remitente, String mensaje, boolean esGrupo) {
         try {
             File carpeta = new File("historiales");
             if (!carpeta.exists()) {
-                carpeta.mkdir(); 
+                carpeta.mkdir();
             }
 
-            String nombreArchivo = "chat_" + miUsuario.toLowerCase() + "_" + contacto.toLowerCase() + ".txt";
+            String prefijo = esGrupo ? "grupo_" : "priv_";
+            String nombreArchivo = "chat_" + prefijo + miUsuario.toLowerCase() + "_" + contacto.toLowerCase() + ".txt";
             File archivo = new File(carpeta, nombreArchivo);
 
             DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
             String fechaHora = dtf.format(LocalDateTime.now());
 
             try (BufferedWriter bw = new BufferedWriter(new FileWriter(archivo, true))) {
-                // Guarda en el disco duro CON fecha y hora
                 bw.write("[" + fechaHora + "] " + remitente + ": " + mensaje);
-                bw.newLine(); 
+                bw.newLine();
             }
 
         } catch (IOException e) {
@@ -59,9 +65,14 @@ public class HistorialChat {
         }
     }
 
-    public static List<Mensaje> cargarHistorial(String miUsuario, String contacto) {
+    /**
+     * Carga el historial de un chat. Si esGrupo=true lee el archivo de grupo,
+     * si es false lee el archivo privado. Mantiene separados los históricos.
+     */
+    public static List<Mensaje> cargarHistorial(String miUsuario, String contacto, boolean esGrupo) {
         List<Mensaje> historial = new ArrayList<>();
-        String nombreArchivo = "chat_" + miUsuario.toLowerCase() + "_" + contacto.toLowerCase() + ".txt";
+        String prefijo = esGrupo ? "grupo_" : "priv_";
+        String nombreArchivo = "chat_" + prefijo + miUsuario.toLowerCase() + "_" + contacto.toLowerCase() + ".txt";
         File archivo = new File("historiales", nombreArchivo);
 
         if (archivo.exists()) {
@@ -70,7 +81,7 @@ public class HistorialChat {
                 Mensaje ultimoMensaje = null;
                 while ((linea = br.readLine()) != null) {
                     int indiceCierre = linea.indexOf("] ");
-                    
+
                     if (linea.startsWith("[") && indiceCierre != -1) {
                         String resto = linea.substring(indiceCierre + 2);
                         int colonIndex = resto.indexOf(": ");
