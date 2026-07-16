@@ -53,6 +53,22 @@ public class ManejadorCliente implements Runnable {
                     String nombreGrupo = partes[1];
                     String mensaje = partes[2];
                     ServidorCentral.enviarMensajeGrupal(miUsuario, nombreGrupo, mensaje);
+
+                } else if (comando.equals("ESCRIBIENDO") && partes.length >= 2) {
+                    String destinatario = partes[1];
+                    ServidorCentral.enviarEstadoEscribiendo(miUsuario, destinatario, true);
+
+                } else if (comando.equals("NO_ESCRIBIENDO") && partes.length >= 2) {
+                    String destinatario = partes[1];
+                    ServidorCentral.enviarEstadoEscribiendo(miUsuario, destinatario, false);
+
+                } else if (comando.equals("GRUPO_ESCRIBIENDO") && partes.length >= 2) {
+                    String nombreGrupo = partes[1];
+                    ServidorCentral.enviarEstadoEscribiendoGrupal(miUsuario, nombreGrupo, true);
+
+                } else if (comando.equals("GRUPO_NO_ESCRIBIENDO") && partes.length >= 2) {
+                    String nombreGrupo = partes[1];
+                    ServidorCentral.enviarEstadoEscribiendoGrupal(miUsuario, nombreGrupo, false);
                 }
             }
         } catch (IOException e) {

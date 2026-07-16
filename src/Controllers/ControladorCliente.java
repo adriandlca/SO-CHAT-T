@@ -145,6 +145,16 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 }
             }
 
+            chat.setAccionEscribiendo(escribiendo -> {
+                if (misGrupos.contains(nombreDestino)) {
+                    String comando = escribiendo ? "GRUPO_ESCRIBIENDO" : "GRUPO_NO_ESCRIBIENDO";
+                    salida.println(comando + "|" + nombreDestino);
+                } else {
+                    String comando = escribiendo ? "ESCRIBIENDO" : "NO_ESCRIBIENDO";
+                    salida.println(comando + "|" + nombreDestino);
+                }
+            });
+
             chat.setAccionEnviar(e -> {
                 String mensaje = ventanaActual.getMensajeEscrito();
                 if (mensaje.trim().isEmpty()) return;
@@ -209,6 +219,9 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             VentanaChat chat = chatsAbiertos.get(remitente);
             Color colorRemitente = obtenerColorUsuario(remitente);
 
+            // Al llegar un mensaje, apagamos el estado "escribiendo..." del remitente
+            if (chat != null) chat.mostrarEscribiendo(false);
+
             if (mensaje.startsWith("[ARCHIVO]")) {
                 String contenido = mensaje.substring(9);
                 int divisor = contenido.indexOf("<::>");
@@ -241,6 +254,9 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             VentanaChat chat = chatsAbiertos.get(grupo);
             Color colorRemitente = obtenerColorUsuario(remitente);
 
+            // Al llegar un mensaje, apagamos el estado "escribiendo..." de este usuario en el grupo
+            if (chat != null) chat.mostrarEscribiendoGrupal(remitente, false);
+
             if (mensaje.startsWith("[ARCHIVO]")) {
                 String contenido = mensaje.substring(9);
                 int divisor = contenido.indexOf("<::>");
@@ -262,6 +278,24 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
                 String mensajeDecodificado = mensaje.replace("<BR>", "\n");
                 HistorialChat.guardarMensaje(miUsuario, grupo, remitente, mensajeDecodificado);
                 chat.mostrarMensajeConColor(remitente, mensajeDecodificado, colorRemitente);
+            }
+        });
+    }
+
+    public void recibirEstadoEscribiendo(String remitente, boolean escribiendo) {
+        SwingUtilities.invokeLater(() -> {
+            VentanaChat chat = chatsAbiertos.get(remitente);
+            if (chat != null && chat.isVisible()) {
+                chat.mostrarEscribiendo(escribiendo);
+            }
+        });
+    }
+
+    public void recibirEstadoEscribiendoGrupal(String grupo, String remitente, boolean escribiendo) {
+        SwingUtilities.invokeLater(() -> {
+            VentanaChat chat = chatsAbiertos.get(grupo);
+            if (chat != null && chat.isVisible()) {
+                chat.mostrarEscribiendoGrupal(remitente, escribiendo);
             }
         });
     }

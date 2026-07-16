@@ -4,6 +4,8 @@ import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
 import java.io.File;
+import java.util.HashSet;
+import java.util.Set;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
@@ -14,6 +16,13 @@ public class VentanaChat extends JFrame {
     private JButton jbtnEnviar;
     private JPanel panelContenedorMensajes;
     private JScrollPane scrollLectura;
+    private JLabel lblEscribiendo;
+
+    private Timer timerEscribiendo;
+    private boolean isTyping = false;
+    private java.util.function.Consumer<Boolean> accionEscribiendo;
+
+    private Set<String> usuariosEscribiendo = new HashSet<>();
 
     private java.util.function.Consumer<File> accionEnviarImagen;
     private java.util.function.Consumer<File> accionEnviarArchivo;
@@ -47,6 +56,18 @@ public class VentanaChat extends JFrame {
         JScrollPane scrollInput = new JScrollPane(taInputMensaje);
         scrollInput.setBorder(new LineBorder(new Color(203, 213, 225), 1, true));
 
+        lblEscribiendo = new JLabel(" ");
+        lblEscribiendo.setFont(new Font("Segoe UI", Font.ITALIC, 11));
+        lblEscribiendo.setForeground(new Color(100, 116, 139));
+        lblEscribiendo.setBorder(new EmptyBorder(0, 5, 2, 0));
+
+        JPanel panelInputYEstado = new JPanel(new BorderLayout());
+        panelInputYEstado.setOpaque(false);
+        panelInputYEstado.add(lblEscribiendo, BorderLayout.NORTH);
+        panelInputYEstado.add(scrollInput, BorderLayout.CENTER);
+
+        configurarDetectorEscritura();
+
         JButton btnAbrirEmojis = new JButton("😀");
         btnAbrirEmojis.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 18));
         btnAbrirEmojis.setBackground(Color.WHITE);
@@ -54,7 +75,6 @@ public class VentanaChat extends JFrame {
         btnAbrirEmojis.setFocusable(false);
         btnAbrirEmojis.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-        // Botón de IMAGEN con Icono Vectorial
         JButton btnAdjuntarImagen = new JButton(new FotoIcon());
         btnAdjuntarImagen.setToolTipText("Adjuntar Imagen");
         btnAdjuntarImagen.setBackground(Color.WHITE);
@@ -62,7 +82,6 @@ public class VentanaChat extends JFrame {
         btnAdjuntarImagen.setFocusable(false);
         btnAdjuntarImagen.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-        // Botón de ARCHIVO con Icono Vectorial de CLIP
         JButton btnAdjuntarArchivo = new JButton(new ClipIcon());
         btnAdjuntarArchivo.setToolTipText("Adjuntar Documento");
         btnAdjuntarArchivo.setBackground(Color.WHITE);
@@ -138,13 +157,70 @@ public class VentanaChat extends JFrame {
         JPanel panelFilaMensaje = new JPanel(new BorderLayout(10, 0));
         panelFilaMensaje.setBackground(new Color(241, 245, 249));
         panelFilaMensaje.setBorder(new EmptyBorder(0, 15, 15, 15));
-        panelFilaMensaje.add(scrollInput, BorderLayout.CENTER);
+
+        panelFilaMensaje.add(panelInputYEstado, BorderLayout.CENTER);
         panelFilaMensaje.add(panelBotones, BorderLayout.EAST);
 
         this.add(panelFilaMensaje, BorderLayout.SOUTH);
         this.setSize(480, 520);
         this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         this.setLocationRelativeTo(null);
+    }
+
+    private void configurarDetectorEscritura() {
+        timerEscribiendo = new Timer(1500, e -> {
+            if (isTyping) {
+                isTyping = false;
+                if (accionEscribiendo != null) accionEscribiendo.accept(false);
+            }
+        });
+        timerEscribiendo.setRepeats(false);
+
+        taInputMensaje.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { avisarEscribiendo(); }
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { avisarEscribiendo(); }
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { avisarEscribiendo(); }
+        });
+    }
+
+    private void avisarEscribiendo() {
+        if (!isTyping && taInputMensaje.getText().length() > 0) {
+            isTyping = true;
+            if (accionEscribiendo != null) accionEscribiendo.accept(true);
+        }
+        if (taInputMensaje.getText().length() == 0 && isTyping) {
+            isTyping = false;
+            timerEscribiendo.stop();
+            if (accionEscribiendo != null) accionEscribiendo.accept(false);
+        } else {
+            timerEscribiendo.restart();
+        }
+    }
+
+    // Para Chat de 2 personas
+    public void mostrarEscribiendo(boolean escribiendo) {
+        SwingUtilities.invokeLater(() -> {
+            lblEscribiendo.setText(escribiendo ? "escribiendo..." : " ");
+        });
+    }
+
+    // Para Chat Grupal: rastrea múltiples personas escribiendo simultáneamente
+    public void mostrarEscribiendoGrupal(String remitente, boolean escribiendo) {
+        SwingUtilities.invokeLater(() -> {
+            if (escribiendo) {
+                usuariosEscribiendo.add(remitente);
+            } else {
+                usuariosEscribiendo.remove(remitente);
+            }
+
+            if (usuariosEscribiendo.isEmpty()) {
+                lblEscribiendo.setText(" ");
+            } else if (usuariosEscribiendo.size() == 1) {
+                lblEscribiendo.setText(usuariosEscribiendo.iterator().next() + " está escribiendo...");
+            } else {
+                lblEscribiendo.setText("Varios usuarios están escribiendo...");
+            }
+        });
     }
 
     private JPopupMenu crearPanelEmojis() {
@@ -267,10 +343,21 @@ public class VentanaChat extends JFrame {
         });
     }
 
+    public void setAccionEscribiendo(java.util.function.Consumer<Boolean> accion) { this.accionEscribiendo = accion; }
     public void setOnImagenSeleccionada(java.util.function.Consumer<File> accion) { this.accionEnviarImagen = accion; }
     public void setOnArchivoSeleccionado(java.util.function.Consumer<File> accion) { this.accionEnviarArchivo = accion; }
     public String getMensajeEscrito() { return taInputMensaje.getText(); }
-    public void limpiarInput() { taInputMensaje.setText(""); taInputMensaje.requestFocus(); }
+
+    public void limpiarInput() {
+        taInputMensaje.setText("");
+        taInputMensaje.requestFocus();
+        if (isTyping) {
+            isTyping = false;
+            timerEscribiendo.stop();
+            if (accionEscribiendo != null) accionEscribiendo.accept(false);
+        }
+    }
+
     public void setAccionEnviar(ActionListener accion) { jbtnEnviar.addActionListener(accion); }
 
     // --- ICONOS VECTORIALES (GARANTIZAN COMPATIBILIDAD) ---

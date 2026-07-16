@@ -49,6 +49,24 @@ public class HiloCliente implements Runnable {
                     String data = partes.length > 1 ? partes[1] : "";
                     String[] grupos = data.isEmpty() ? new String[0] : data.split(",");
                     controlador.actualizarListaGrupos(grupos);
+
+                } else if (comando.equals("ESCRIBIENDO") && partes.length >= 2) {
+                    String remitente = partes[1];
+                    controlador.recibirEstadoEscribiendo(remitente, true);
+
+                } else if (comando.equals("NO_ESCRIBIENDO") && partes.length >= 2) {
+                    String remitente = partes[1];
+                    controlador.recibirEstadoEscribiendo(remitente, false);
+
+                } else if (comando.equals("GRUPO_ESCRIBIENDO") && partes.length >= 3) {
+                    String nombreGrupo = partes[1];
+                    String remitente = partes[2];
+                    controlador.recibirEstadoEscribiendoGrupal(nombreGrupo, remitente, true);
+
+                } else if (comando.equals("GRUPO_NO_ESCRIBIENDO") && partes.length >= 3) {
+                    String nombreGrupo = partes[1];
+                    String remitente = partes[2];
+                    controlador.recibirEstadoEscribiendoGrupal(nombreGrupo, remitente, false);
                 }
             }
         } catch (IOException e) {

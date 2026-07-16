@@ -67,6 +67,31 @@ public class ServidorCentral {
         }
     }
 
+    // Reenvía el aviso "escribiendo" / "dejó de escribir" al chat privado correspondiente
+    public static void enviarEstadoEscribiendo(String remitente, String destinatario, boolean escribiendo) {
+        ManejadorCliente manejadorDestino = clientesConectados.get(destinatario);
+        if (manejadorDestino != null) {
+            String comando = escribiendo ? "ESCRIBIENDO" : "NO_ESCRIBIENDO";
+            manejadorDestino.enviarPaquete(comando + "|" + remitente);
+        }
+    }
+
+    // Reenvía el aviso "escribiendo" grupal a todos los integrantes excepto a quien escribe
+    public static void enviarEstadoEscribiendoGrupal(String remitente, String nombreGrupo, boolean escribiendo) {
+        ArrayList<String> miembros = gruposActivos.get(nombreGrupo);
+        if (miembros != null) {
+            String comando = escribiendo ? "GRUPO_ESCRIBIENDO" : "GRUPO_NO_ESCRIBIENDO";
+            for (String miembro : miembros) {
+                if (!miembro.equals(remitente)) {
+                    ManejadorCliente manejadorDestino = clientesConectados.get(miembro);
+                    if (manejadorDestino != null) {
+                        manejadorDestino.enviarPaquete(comando + "|" + nombreGrupo + "|" + remitente);
+                    }
+                }
+            }
+        }
+    }
+
     private static synchronized void broadcastListaUsuarios() {
         String nombres = String.join(",", clientesConectados.keySet());
         String paqueteLista = clientesConectados.isEmpty() ? "LISTA|" : "LISTA|" + nombres;
