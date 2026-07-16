@@ -1,12 +1,15 @@
 package Views;
 
 import java.awt.*;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
+import javax.swing.event.HyperlinkEvent;
+import javax.swing.text.View;
 
 public class BurbujaMensaje extends JPanel {
 
-    // CONSTRUCTOR PARA TEXTO
     public BurbujaMensaje(String remitente, String texto, Color colorRemitente, boolean esMio) {
         this.setOpaque(false);
         this.setLayout(new BorderLayout());
@@ -23,21 +26,60 @@ public class BurbujaMensaje extends JPanel {
             contenedorTexto.add(lblNombre, BorderLayout.NORTH);
         }
 
-        JTextArea areaTexto = new JTextArea(texto);
+        JEditorPane areaTexto = new JEditorPane() {
+            @Override
+            public Dimension getPreferredSize() {
+                int maxAncho = 350;
+                View view = getUI().getRootView(this);
+                view.setSize(maxAncho, Integer.MAX_VALUE);
+                float w = view.getPreferredSpan(View.X_AXIS);
+                float h = view.getPreferredSpan(View.Y_AXIS);
+
+                int anchoFinal = (int) Math.min(maxAncho, w + 30);
+                anchoFinal = Math.max(anchoFinal, 120);
+
+                return new Dimension(anchoFinal, (int) h + 10);
+            }
+        };
+
+        areaTexto.setContentType("text/html");
         areaTexto.setEditable(false);
         areaTexto.setOpaque(false);
-        areaTexto.setLineWrap(true);
-        areaTexto.setWrapStyleWord(true);
+        areaTexto.putClientProperty(JEditorPane.HONOR_DISPLAY_PROPERTIES, true);
         areaTexto.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14));
-        areaTexto.setForeground(esMio ? Color.WHITE : new Color(15, 23, 42));
-        areaTexto.setMargin(new Insets(0, 0, 0, 0)); // Evita desalineación
+
+        String colorLink = esMio ? "#93C5FD" : "#2563EB";
+        String colorTexto = esMio ? "#FFFFFF" : "#0F172A";
+
+        String textoHtml = procesarEnlaces(texto, colorLink);
+        areaTexto.setText("<html><body style='color: " + colorTexto + "; margin: 0; padding: 0;'>" + textoHtml + "</body></html>");
+
+        areaTexto.addHyperlinkListener(e -> {
+            if (e.getEventType() == HyperlinkEvent.EventType.ACTIVATED) {
+                try {
+                    Desktop.getDesktop().browse(e.getURL().toURI());
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
 
         contenedorTexto.add(areaTexto, BorderLayout.CENTER);
+
+        JLabel lblHora = new JLabel(obtenerHoraActual());
+        lblHora.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        lblHora.setForeground(esMio ? new Color(191, 219, 254) : new Color(148, 163, 184));
+        lblHora.setBorder(new EmptyBorder(0, 10, 0, 0));
+
+        JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        panelSur.setOpaque(false);
+        panelSur.add(lblHora);
+
+        contenedorTexto.add(panelSur, BorderLayout.SOUTH);
 
         inicializarBurbuja(contenedorTexto, esMio, 6, 10);
     }
 
-    // CONSTRUCTOR PARA IMÁGENES
     public BurbujaMensaje(String remitente, ImageIcon iconoOriginal, Color colorRemitente, boolean esMio) {
         this.setOpaque(false);
         this.setLayout(new BorderLayout());
@@ -58,7 +100,41 @@ public class BurbujaMensaje extends JPanel {
         JLabel lblImagen = new JLabel(iconoRedimensionado);
         contenedorImagen.add(lblImagen, BorderLayout.CENTER);
 
+        JLabel lblHora = new JLabel(obtenerHoraActual());
+        lblHora.setFont(new Font("Segoe UI", Font.PLAIN, 10));
+        lblHora.setForeground(esMio ? new Color(191, 219, 254) : new Color(148, 163, 184));
+        lblHora.setBorder(new EmptyBorder(4, 10, 0, 0));
+
+        JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        panelSur.setOpaque(false);
+        panelSur.add(lblHora);
+
+        contenedorImagen.add(panelSur, BorderLayout.SOUTH);
+
         inicializarBurbuja(contenedorImagen, esMio, 4, 4);
+    }
+
+    private String obtenerHoraActual() {
+        LocalTime hora = LocalTime.now();
+        DateTimeFormatter dtf = DateTimeFormatter.ofPattern("h:mm a");
+        return hora.format(dtf).toLowerCase().replace("am", "a.m.").replace("pm", "p.m.");
+    }
+
+    private String procesarEnlaces(String texto, String colorLink) {
+        texto = texto.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("\n", "<br>");
+
+        String regex = "(https?://[-a-zA-Z0-9+&@#/%?=~_|!:,.;]*[-a-zA-Z0-9+&@#/%=~_|])";
+        java.util.regex.Pattern p = java.util.regex.Pattern.compile(regex);
+        java.util.regex.Matcher m = p.matcher(texto);
+        StringBuffer sb = new StringBuffer();
+
+        while (m.find()) {
+            String url = m.group(1);
+            String urlVisible = url.replaceAll("(.{35})", "$1 ");
+            m.appendReplacement(sb, "<a href=\"" + url + "\" style=\"color: " + colorLink + "; text-decoration: none;\">" + urlVisible + "</a>");
+        }
+        m.appendTail(sb);
+        return sb.toString();
     }
 
     private void inicializarBurbuja(JPanel contenido, boolean esMio, int padV, int padH) {

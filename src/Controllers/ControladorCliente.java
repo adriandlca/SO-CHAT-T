@@ -5,6 +5,7 @@ import Views.VentanaContactos;
 import Views.VentanaPrincipal;
 import Views.ConversorImagen;
 import Views.ManejadorArchivos;
+import Views.SonidoNotificacion;
 import java.awt.Color;
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -105,6 +106,16 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
      */
     private String claveChat(String nombreDestino, boolean esGrupo) {
         return (esGrupo ? "grupo_" : "priv_") + nombreDestino;
+    }
+
+    /**
+     * Reproduce el sonido de notificación solo si la ventana del chat no es la
+     * activa. Si el usuario ya tiene el chat al frente, no pita.
+     */
+    private void notificarMensajeRecibido(VentanaChat chat) {
+        if (chat == null || !chat.isActive()) {
+            SonidoNotificacion.reproducir();
+        }
     }
 
     public void actualizarListaContactos(String[] usuarios) {
@@ -260,6 +271,7 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             Color colorRemitente = obtenerColorUsuario(remitente);
 
             if (chat != null) chat.mostrarEscribiendo(false);
+            notificarMensajeRecibido(chat);
 
             if (mensaje.startsWith("[ARCHIVO]")) {
                 String contenido = mensaje.substring(9);
@@ -294,6 +306,7 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
             Color colorRemitente = obtenerColorUsuario(remitente);
 
             if (chat != null) chat.mostrarEscribiendoGrupal(remitente, false);
+            notificarMensajeRecibido(chat);
 
             if (mensaje.startsWith("[ARCHIVO]")) {
                 String contenido = mensaje.substring(9);
