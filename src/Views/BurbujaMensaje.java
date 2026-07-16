@@ -19,7 +19,7 @@ public class BurbujaMensaje extends JPanel {
             JLabel lblNombre = new JLabel(remitente);
             lblNombre.setFont(new Font("Segoe UI", Font.BOLD, 12));
             lblNombre.setForeground(colorRemitente);
-            lblNombre.setBorder(new EmptyBorder(0, 0, 2, 0)); 
+            lblNombre.setBorder(new EmptyBorder(0, 0, 2, 0));
             contenedorTexto.add(lblNombre, BorderLayout.NORTH);
         }
 
@@ -50,7 +50,7 @@ public class BurbujaMensaje extends JPanel {
             JLabel lblNombre = new JLabel(remitente);
             lblNombre.setFont(new Font("Segoe UI", Font.BOLD, 12));
             lblNombre.setForeground(colorRemitente);
-            lblNombre.setBorder(new EmptyBorder(0, 0, 4, 0)); 
+            lblNombre.setBorder(new EmptyBorder(0, 0, 4, 0));
             contenedorImagen.add(lblNombre, BorderLayout.NORTH);
         }
 
@@ -73,9 +73,9 @@ public class BurbujaMensaje extends JPanel {
                 g2.dispose();
             }
         };
-        
+
         panelBurbuja.setOpaque(false);
-        panelBurbuja.setBorder(new EmptyBorder(padV, padH, padV, padH)); 
+        panelBurbuja.setBorder(new EmptyBorder(padV, padH, padV, padH));
         panelBurbuja.add(contenido, BorderLayout.CENTER);
 
         JPanel alineador = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT, 0, 0));
@@ -89,7 +89,7 @@ public class BurbujaMensaje extends JPanel {
         Image img = icono.getImage();
         int anchoOriginal = img.getWidth(null);
         int altoOriginal = img.getHeight(null);
-        
+
         if (anchoOriginal <= 0 || altoOriginal <= 0) return icono;
 
         double ratioAncho = (double) maxAncho / anchoOriginal;

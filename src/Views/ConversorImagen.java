@@ -13,14 +13,14 @@ public class ConversorImagen {
     public static String imageIconToBase64(ImageIcon icon) {
         try {
             BufferedImage bi = new BufferedImage(
-                icon.getIconWidth(),
-                icon.getIconHeight(),
-                BufferedImage.TYPE_INT_ARGB
+                    icon.getIconWidth(),
+                    icon.getIconHeight(),
+                    BufferedImage.TYPE_INT_ARGB
             );
             Graphics g = bi.createGraphics();
             icon.paintIcon(null, g, 0, 0);
             g.dispose();
-            
+
             ByteArrayOutputStream baos = new ByteArrayOutputStream();
             ImageIO.write(bi, "png", baos);
             byte[] bytes = baos.toByteArray();
