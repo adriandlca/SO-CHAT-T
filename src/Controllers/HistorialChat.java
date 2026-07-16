@@ -66,6 +66,45 @@ public class HistorialChat {
     }
 
     /**
+     * Busca mensajes dentro del archivo de historial cuyo contenido (después del
+     * remitente) contenga el filtro indicado. La búsqueda ignora mayúsculas /
+     * minúsculas y solo revisa el texto del mensaje, no el nombre del remitente.
+     * @return líneas completas con formato "[fecha hora] Remitente: mensaje"
+     */
+    public static List<String> buscarMensajes(String miUsuario, String contacto, String filtro, boolean esGrupo) {
+        List<String> resultados = new ArrayList<>();
+        if (filtro == null || filtro.trim().isEmpty()) return resultados;
+
+        String prefijo = esGrupo ? "grupo_" : "priv_";
+        String nombreArchivo = "chat_" + prefijo + miUsuario.toLowerCase() + "_" + contacto.toLowerCase() + ".txt";
+        File archivo = new File("historiales", nombreArchivo);
+
+        if (archivo.exists()) {
+            try (BufferedReader br = new BufferedReader(new FileReader(archivo))) {
+                String linea;
+                String filtroLower = filtro.toLowerCase();
+                while ((linea = br.readLine()) != null) {
+                    int idxCierre = linea.indexOf("] ");
+                    if (idxCierre != -1) {
+                        String resto = linea.substring(idxCierre + 2);
+                        int idxDosPuntos = resto.indexOf(": ");
+
+                        if (idxDosPuntos != -1) {
+                            String contenidoMensaje = resto.substring(idxDosPuntos + 2);
+                            if (contenidoMensaje.toLowerCase().contains(filtroLower)) {
+                                resultados.add(linea.replace("<BR>", " "));
+                            }
+                        }
+                    }
+                }
+            } catch (IOException e) {
+                System.err.println("Error al buscar en el historial: " + e.getMessage());
+            }
+        }
+        return resultados;
+    }
+
+    /**
      * Carga el historial de un chat. Si esGrupo=true lee el archivo de grupo,
      * si es false lee el archivo privado. Mantiene separados los históricos.
      */

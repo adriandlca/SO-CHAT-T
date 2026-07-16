@@ -165,7 +165,7 @@ public class ControladorCliente implements VentanaPrincipal.ConexionListener {
         VentanaChat chat = chatsAbiertos.get(clave);
 
         if (chat == null || !chat.isVisible()) {
-            chat = new VentanaChat(nombreDestino);
+            chat = new VentanaChat(miUsuario, nombreDestino, esGrupo);
             VentanaChat ventanaActual = chat;
 
             // Cargamos historial desde el archivo según el tipo

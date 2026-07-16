@@ -1,5 +1,6 @@
 package Views;
 
+import Controllers.HistorialChat;
 import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -8,18 +9,27 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.util.Base64;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
+import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
 import javax.swing.*;
 import javax.swing.border.EmptyBorder;
 import javax.swing.border.LineBorder;
+import javax.swing.event.DocumentEvent;
+import javax.swing.event.DocumentListener;
 
 public class VentanaChat extends JFrame {
+
+    private final String miUsuario;
+    private final String contactoDestino;
+    private final boolean esGrupo;
 
     private JTextArea taInputMensaje;
     private JButton jbtnEnviar;
     private JPanel panelContenedorMensajes;
     private JScrollPane scrollLectura;
+    private JPanel panelBusqueda;
     private JLabel lblEscribiendo;
 
     private Timer timerEscribiendo;
@@ -32,10 +42,32 @@ public class VentanaChat extends JFrame {
     private java.util.function.Consumer<File> accionEnviarArchivo;
     private java.util.function.Consumer<String> accionEnviarSticker;
 
-    public VentanaChat(String contactoDestino) {
+    public VentanaChat(String miUsuario, String contactoDestino, boolean esGrupo) {
         super("Chat: " + contactoDestino);
+        this.miUsuario = miUsuario;
+        this.contactoDestino = contactoDestino;
+        this.esGrupo = esGrupo;
         this.setLayout(new BorderLayout());
         this.getContentPane().setBackground(new Color(241, 245, 249));
+
+        // --- CABECERA DE CHAT ---
+        JPanel panelCabecera = new JPanel(new BorderLayout());
+        panelCabecera.setBackground(Color.WHITE);
+        panelCabecera.setBorder(new EmptyBorder(10, 15, 10, 15));
+
+        JLabel lblTituloChat = new JLabel(contactoDestino);
+        lblTituloChat.setFont(new Font("Segoe UI", Font.BOLD, 16));
+        lblTituloChat.setForeground(new Color(15, 23, 42));
+
+        JButton btnActivarBusqueda = new JButton("🔍");
+        btnActivarBusqueda.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 18));
+        btnActivarBusqueda.setFocusable(false);
+        btnActivarBusqueda.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnActivarBusqueda.setBackground(Color.WHITE);
+        btnActivarBusqueda.setBorder(new EmptyBorder(5, 10, 5, 10));
+
+        panelCabecera.add(lblTituloChat, BorderLayout.WEST);
+        panelCabecera.add(btnActivarBusqueda, BorderLayout.EAST);
 
         panelContenedorMensajes = new JPanel();
         panelContenedorMensajes.setLayout(new BoxLayout(panelContenedorMensajes, BoxLayout.Y_AXIS));
@@ -50,7 +82,29 @@ public class VentanaChat extends JFrame {
         scrollLectura.getVerticalScrollBar().setUnitIncrement(16);
         panelLectura.add(scrollLectura, BorderLayout.CENTER);
 
-        this.add(panelLectura, BorderLayout.CENTER);
+        JPanel panelChatCentral = new JPanel(new BorderLayout());
+        panelChatCentral.add(panelCabecera, BorderLayout.NORTH);
+        panelChatCentral.add(panelLectura, BorderLayout.CENTER);
+
+        // --- PANEL DE BÚSQUEDA LATERAL ---
+        panelBusqueda = crearPanelBusqueda();
+        panelBusqueda.setVisible(false);
+
+        btnActivarBusqueda.addActionListener(e -> {
+            boolean estaVisible = panelBusqueda.isVisible();
+            panelBusqueda.setVisible(!estaVisible);
+            if (!estaVisible) {
+                this.setSize(800, 560);
+                btnActivarBusqueda.setForeground(new Color(37, 99, 235));
+            } else {
+                this.setSize(480, 560);
+                btnActivarBusqueda.setForeground(new Color(15, 23, 42));
+            }
+            this.revalidate();
+        });
+
+        this.add(panelChatCentral, BorderLayout.CENTER);
+        this.add(panelBusqueda, BorderLayout.EAST);
 
         taInputMensaje = new JTextArea(2, 20);
         taInputMensaje.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14));
@@ -65,11 +119,6 @@ public class VentanaChat extends JFrame {
         lblEscribiendo.setFont(new Font("Segoe UI", Font.ITALIC, 11));
         lblEscribiendo.setForeground(new Color(100, 116, 139));
         lblEscribiendo.setBorder(new EmptyBorder(0, 5, 2, 0));
-
-        JPanel panelInputYEstado = new JPanel(new BorderLayout());
-        panelInputYEstado.setOpaque(false);
-        panelInputYEstado.add(lblEscribiendo, BorderLayout.NORTH);
-        panelInputYEstado.add(scrollInput, BorderLayout.CENTER);
 
         configurarDetectorEscritura();
 
@@ -172,17 +221,199 @@ public class VentanaChat extends JFrame {
         panelBotones.add(wrapperAuxiliares, BorderLayout.WEST);
         panelBotones.add(jbtnEnviar, BorderLayout.CENTER);
 
-        JPanel panelFilaMensaje = new JPanel(new BorderLayout(10, 0));
+        JPanel filaInput = new JPanel(new BorderLayout(10, 0));
+        filaInput.setOpaque(false);
+        filaInput.add(scrollInput, BorderLayout.CENTER);
+        filaInput.add(panelBotones, BorderLayout.EAST);
+
+        JPanel panelFilaMensaje = new JPanel(new BorderLayout(0, 0));
         panelFilaMensaje.setBackground(new Color(241, 245, 249));
         panelFilaMensaje.setBorder(new EmptyBorder(0, 15, 15, 15));
 
-        panelFilaMensaje.add(panelInputYEstado, BorderLayout.CENTER);
-        panelFilaMensaje.add(panelBotones, BorderLayout.EAST);
+        panelFilaMensaje.add(lblEscribiendo, BorderLayout.NORTH);
+        panelFilaMensaje.add(filaInput, BorderLayout.CENTER);
 
         this.add(panelFilaMensaje, BorderLayout.SOUTH);
-        this.setSize(480, 520);
+        this.setSize(480, 560);
         this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         this.setLocationRelativeTo(null);
+    }
+
+    private JPanel crearPanelBusqueda() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setPreferredSize(new Dimension(300, 0));
+        panel.setBackground(new Color(248, 250, 252));
+        panel.setBorder(new LineBorder(new Color(203, 213, 225), 1, false));
+
+        JPanel headerBusqueda = new JPanel(new BorderLayout());
+        headerBusqueda.setBackground(Color.WHITE);
+        headerBusqueda.setBorder(new EmptyBorder(12, 15, 12, 15));
+        JLabel lblTitulo = new JLabel("Buscar mensajes");
+        lblTitulo.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        headerBusqueda.add(lblTitulo, BorderLayout.CENTER);
+
+        JTextField txtBuscar = new JTextField();
+        txtBuscar.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        txtBuscar.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(new Color(203, 213, 225), 1, true),
+                new EmptyBorder(6, 10, 6, 10)
+        ));
+
+        JPanel panelInput = new JPanel(new BorderLayout());
+        panelInput.setBackground(Color.WHITE);
+        panelInput.setBorder(new EmptyBorder(0, 15, 15, 15));
+        panelInput.add(txtBuscar, BorderLayout.CENTER);
+
+        JPanel panelTopBusqueda = new JPanel(new BorderLayout());
+        panelTopBusqueda.add(headerBusqueda, BorderLayout.NORTH);
+        panelTopBusqueda.add(panelInput, BorderLayout.SOUTH);
+
+        JPanel panelResultados = new JPanel();
+        panelResultados.setLayout(new BoxLayout(panelResultados, BoxLayout.Y_AXIS));
+        panelResultados.setBackground(new Color(248, 250, 252));
+
+        JScrollPane scrollBusqueda = new JScrollPane(panelResultados);
+        scrollBusqueda.setBorder(null);
+        scrollBusqueda.getVerticalScrollBar().setUnitIncrement(16);
+
+        panel.add(panelTopBusqueda, BorderLayout.NORTH);
+        panel.add(scrollBusqueda, BorderLayout.CENTER);
+
+        txtBuscar.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { ejecutarBusqueda(); }
+            public void removeUpdate(DocumentEvent e) { ejecutarBusqueda(); }
+            public void changedUpdate(DocumentEvent e) { ejecutarBusqueda(); }
+
+            private void ejecutarBusqueda() {
+                String filtro = txtBuscar.getText();
+                panelResultados.removeAll();
+
+                if (!filtro.trim().isEmpty()) {
+                    List<String> encontrados = HistorialChat.buscarMensajes(miUsuario, contactoDestino, filtro, esGrupo);
+                    for (String linea : encontrados) {
+                        panelResultados.add(crearItemResultado(linea, filtro));
+                        panelResultados.add(Box.createVerticalStrut(4));
+                    }
+                }
+                panelResultados.revalidate();
+                panelResultados.repaint();
+            }
+        });
+
+        return panel;
+    }
+
+    private JPanel crearItemResultado(String linea, String filtro) {
+        JPanel item = new JPanel(new BorderLayout());
+        item.setBackground(Color.WHITE);
+        item.setBorder(BorderFactory.createCompoundBorder(
+                new LineBorder(new Color(226, 232, 240), 1),
+                new EmptyBorder(10, 15, 10, 15)
+        ));
+        item.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
+
+        try {
+            int idxCierre = linea.indexOf("] ");
+            String fecha = linea.substring(1, 11);
+            String resto = linea.substring(idxCierre + 2);
+            int idxDosPuntos = resto.indexOf(": ");
+
+            if (idxCierre == -1 || idxDosPuntos == -1) throw new Exception();
+
+            String remitente = resto.substring(0, idxDosPuntos);
+            String mensaje = resto.substring(idxDosPuntos + 2);
+
+            JLabel lblFecha = new JLabel(fecha);
+            lblFecha.setFont(new Font("Segoe UI", Font.PLAIN, 11));
+            lblFecha.setForeground(new Color(100, 116, 139));
+            lblFecha.setBorder(new EmptyBorder(0, 0, 4, 0));
+
+            String regex = "(?i)(" + Pattern.quote(filtro) + ")";
+            String mensajeResaltado = mensaje.replaceAll(regex, "<b style='color: #16a34a;'>$1</b>");
+
+            JLabel lblMensaje = new JLabel("<html><div style='width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>"
+                    + "<b>" + remitente + ":</b> " + mensajeResaltado + "</div></html>");
+            lblMensaje.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+            lblMensaje.setForeground(new Color(15, 23, 42));
+
+            item.add(lblFecha, BorderLayout.NORTH);
+            item.add(lblMensaje, BorderLayout.CENTER);
+
+            final String textoBurbuja = mensaje;
+            item.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            item.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override
+                public void mouseClicked(java.awt.event.MouseEvent evt) {
+                    realizarScrollHaciaMensaje(textoBurbuja);
+                }
+                @Override
+                public void mouseEntered(java.awt.event.MouseEvent evt) { item.setBackground(new Color(239, 246, 255)); }
+                @Override
+                public void mouseExited(java.awt.event.MouseEvent evt) { item.setBackground(Color.WHITE); }
+            });
+
+        } catch (Exception e) {
+            JLabel lblFallback = new JLabel(linea);
+            lblFallback.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+            item.add(lblFallback, BorderLayout.CENTER);
+        }
+
+        return item;
+    }
+
+    private void realizarScrollHaciaMensaje(String textoBurbuja) {
+        if (textoBurbuja == null || textoBurbuja.isEmpty()) return;
+        Component[] componentes = panelContenedorMensajes.getComponents();
+        for (int i = componentes.length - 1; i >= 0; i--) {
+            BurbujaMensaje burbuja = encontrarBurbuja(componentes[i]);
+            if (burbuja != null) {
+                String textoReal = obtenerTextoBurbuja(burbuja);
+                if (textoReal != null && textoReal.contains(textoBurbuja)) {
+                    scrollHaciaBurbuja(burbuja);
+                    return;
+                }
+            }
+        }
+    }
+
+    private BurbujaMensaje encontrarBurbuja(Component comp) {
+        if (comp instanceof BurbujaMensaje) return (BurbujaMensaje) comp;
+        if (comp instanceof Container) {
+            for (Component c : ((Container) comp).getComponents()) {
+                BurbujaMensaje b = encontrarBurbuja(c);
+                if (b != null) return b;
+            }
+        }
+        return null;
+    }
+
+    private String obtenerTextoBurbuja(Component comp) {
+        if (comp instanceof JEditorPane) {
+            try {
+                javax.swing.text.Document doc = ((JEditorPane) comp).getDocument();
+                return doc.getText(0, doc.getLength()).replace("\u200B", "");
+            } catch (Exception ex) {
+                return null;
+            }
+        }
+        if (comp instanceof Container) {
+            for (Component c : ((Container) comp).getComponents()) {
+                String t = obtenerTextoBurbuja(c);
+                if (t != null && !t.trim().isEmpty()) return t;
+            }
+        }
+        return null;
+    }
+
+    private void scrollHaciaBurbuja(BurbujaMensaje burbuja) {
+        SwingUtilities.invokeLater(() -> {
+            Container padre = burbuja.getParent();
+            if (padre == null) return;
+            Point pt = SwingUtilities.convertPoint(padre, burbuja.getLocation(), panelContenedorMensajes);
+            JScrollBar vertical = scrollLectura.getVerticalScrollBar();
+            int destino = Math.max(0, pt.y - 20);
+            vertical.setValue(destino);
+        });
     }
 
     private void configurarDetectorEscritura() {
