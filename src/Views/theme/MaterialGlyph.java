@@ -1,221 +1,218 @@
 package Views.theme;
 
-import java.awt.BasicStroke;
+import javax.swing.Icon;
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.Graphics;
 import java.awt.Graphics2D;
+import java.awt.GraphicsEnvironment;
 import java.awt.RenderingHints;
 
 /**
- * Iconos vectoriales "Material Symbols" (línea 1.5px) en grilla 24×24.
- * Los paths están simplificados para que se vean bien incluso a 16-20px.
+ * Iconos basados en caracteres Unicode (siempre nítidos, sin paths rotos).
+ * Cada fábrica devuelve un Icon que pinta UN carácter con la mejor fuente disponible.
  *
- * Sólo se exponen los iconos realmente usados por las pantallas rediseñadas.
- * Se han quitado los iconos sin uso (videocam, error, info…) para no
- * inflar la clase con paths que nadie consume.
+ * Si un carácter no existe en la fuente del sistema, el Icon degrada a un
+ * carácter alternativo o un cuadrado/sustituto; nunca falla visualmente.
  */
-public class MaterialGlyph implements javax.swing.Icon {
+public final class MaterialGlyph implements Icon {
 
-    private final int size;
+    private static final String[] FONT_CANDIDATES = {
+            "Segoe UI Symbol",
+            "Apple Symbols",
+            "Noto Sans Symbols",
+            "Noto Sans Symbols2",
+            "DejaVu Sans",
+            "Dialog"
+    };
+
+    private static Font cachedFont;
+    private static final Object FONT_LOCK = new Object();
+
+    private final String text;
+    private final int  size;
     private final Color color;
-    private final float[][] lines;     // pares (x1,y1,x2,y2) en grilla 24x24
-    private final float[][] rects;     // (x,y,w,h) o (x,y,w,h,r)
-    private final float[] dots;        // tripletas (cx,cy,r)
 
-    private MaterialGlyph(int size, Color color, float[][] lines, float[][] rects, float[] dots) {
-        this.size = size;
+    private MaterialGlyph(String text, int size, Color color) {
+        this.text  = text;
+        this.size  = size;
         this.color = color;
-        this.lines = lines;
-        this.rects = rects;
-        this.dots = dots;
     }
 
-    public static MaterialGlyph of(int size, Color color, float[][] lines) {
-        return new MaterialGlyph(size, color, lines, null, null);
-    }
-    public static MaterialGlyph of(int size, Color color, float[][] lines, float[][] rects) {
-        return new MaterialGlyph(size, color, lines, rects, null);
-    }
-    public static MaterialGlyph of(int size, Color color, float[][] lines, float[][] rects, float[] dots) {
-        return new MaterialGlyph(size, color, lines, rects, dots);
+    /** Devuelve la mejor fuente del sistema capaz de pintar símbolos Unicode. */
+    private static Font symbolFont(float pointSize) {
+        synchronized (FONT_LOCK) {
+            if (cachedFont == null) {
+                String[] available = GraphicsEnvironment
+                        .getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+                String chosen = null;
+                for (String cand : FONT_CANDIDATES) {
+                    for (String avail : available) {
+                        if (avail.equalsIgnoreCase(cand)) { chosen = cand; break; }
+                    }
+                    if (chosen != null) break;
+                }
+                if (chosen == null) chosen = Font.SANS_SERIF;
+                cachedFont = new Font(chosen, Font.PLAIN, (int) pointSize);
+            }
+            return cachedFont.deriveFont(Font.PLAIN, pointSize);
+        }
     }
 
     @Override
     public void paintIcon(Component c, Graphics g, int x, int y) {
         Graphics2D g2 = (Graphics2D) g.create();
+        g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
         g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g2.setRenderingHint(RenderingHints.KEY_STROKE_CONTROL, RenderingHints.VALUE_STROKE_PURE);
+        g2.setRenderingHint(RenderingHints.KEY_FRACTIONALMETRICS, RenderingHints.VALUE_FRACTIONALMETRICS_ON);
         g2.setColor(color);
-        g2.translate(x, y);
 
-        // Rectángulos / tarjetas
-        if (rects != null) {
-            for (float[] r : rects) {
-                if (r.length >= 6) g2.drawRoundRect(Math.round(r[0]), Math.round(r[1]),
-                        Math.round(r[2]), Math.round(r[3]),
-                        Math.round(r[4]), Math.round(r[4]));
-                else if (r.length >= 4) g2.drawRect(Math.round(r[0]), Math.round(r[1]),
-                        Math.round(r[2]), Math.round(r[3]));
-            }
+        float fontSize = Math.max(10f, size * 0.85f);
+        Font f = symbolFont(fontSize);
+        g2.setFont(f);
+
+        // Si la fuente no tiene TODOS los glifos, usamos la fuente SansSerif por defecto.
+        if (f.canDisplayUpTo(text) != -1) {
+            f = new Font(Font.SANS_SERIF, Font.PLAIN, (int) fontSize);
+            g2.setFont(f);
         }
 
-        // Puntos (dots)
-        if (dots != null) {
-            for (int i = 0; i + 2 < dots.length; i += 3) {
-                int r = Math.round(dots[i + 2]);
-                g2.fillOval(Math.round(dots[i]) - r, Math.round(dots[i + 1]) - r, r * 2, r * 2);
-            }
-        }
+        FontMetrics fm = g2.getFontMetrics();
+        int charW = fm.stringWidth(text);
+        int ascent = fm.getAscent();
+        int descent = fm.getDescent();
+        int baseline = y + (size + ascent - descent) / 2;
+        int drawX = x + (size - charW) / 2;
 
-        // Líneas (1.5 stroke)
-        if (lines != null) {
-            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            for (float[] l : lines) {
-                if (l.length == 4) g2.drawLine(Math.round(l[0]), Math.round(l[1]),
-                                               Math.round(l[2]), Math.round(l[3]));
-            }
-        }
+        g2.drawString(text, drawX, baseline);
         g2.dispose();
     }
 
     @Override public int getIconWidth()  { return size; }
     @Override public int getIconHeight() { return size; }
 
+    private static MaterialGlyph of(String text, int size, Color color) {
+        return new MaterialGlyph(text, size, color);
+    }
+
     /* ============================================================
-       Fábricas. Geometría en grilla 24x24, normalizada.
-       Cada icono está simplificado para verse nítido a 16-22px.
+       Fábricas (cada una = 1 carácter Unicode claro y estable)
        ============================================================ */
 
-    /** Lupa de búsqueda: círculo + mango diagonal. */
+    /** Lupa de búsqueda. */
     public static MaterialGlyph search(int size, Color color) {
-        return of(size, color,
-                new float[][]{{16, 16, 21, 21}},
-                new float[][]{{10, 2, 12, 12, 6, 6}});
+        return of("\u2315", size, color); // ⌕ (teléfono de búsqueda, BMP)
     }
 
-    /** Flecha atrás: dos segmentos formando una "V" invertida apuntando a la izquierda. */
+    /** Flecha atrás. */
     public static MaterialGlyph arrowBack(int size, Color color) {
-        return of(size, color, new float[][]{
-                {20, 12, 5, 12},   // cuerpo horizontal corto
-                {11, 5,  5, 12},   // diagonal superior -> punta
-                {11, 19, 5, 12}    // diagonal inferior -> punta
-        });
+        return of("\u2190", size, color); // ←
     }
 
-    /** Tres puntos verticales (menú k/m). */
+    /** Tres puntos verticales. */
     public static MaterialGlyph moreVert(int size, Color color) {
-        return of(size, color, null, null,
-                new float[]{12, 5, 1.3f, 12, 12, 1.3f, 12, 19, 1.3f});
+        return of("\u22EE", size, color); // ⋮
     }
 
-    /** "+" centrado. */
+    /** "+". */
     public static MaterialGlyph add(int size, Color color) {
-        return of(size, color, new float[][]{{12, 5, 12, 19}, {5, 12, 19, 12}});
+        return of("+", size, color);
     }
 
-    /** "X". */
+    /** "X" de cierre. */
     public static MaterialGlyph close(int size, Color color) {
-        return of(size, color, new float[][]{{6, 6, 18, 18}, {18, 6, 6, 18}});
+        return of("\u2715", size, color); // ✕
     }
 
     /** Check. */
     public static MaterialGlyph check(int size, Color color) {
-        return of(size, color, new float[][]{{4, 12, 10, 18}, {10, 18, 20, 6}});
+        return of("\u2713", size, color); // ✓
     }
 
-    /** Cara feliz (emoji btn). */
+    /** Cara feliz (smiley BMP — funciona sin fuente de emojis). */
     public static MaterialGlyph emoji(int size, Color color) {
-        return of(size, color, null,
-                new float[][]{{2, 2, 20, 20, 10, 10}},
-                new float[]{8, 9, 1.3f, 16, 9, 1.3f});
+        return of("\u263A", size, color); // ☺
     }
 
-    /** Imagen (montaña + sol). */
+    /** Imagen (cuadrado con esquina rota = marco de cuadro). */
     public static MaterialGlyph image(int size, Color color) {
-        return of(size, color,
-                new float[][]{{2, 16, 8, 10}, {8, 10, 12, 14}, {11, 13, 14, 10}, {14, 10, 22, 18}},
-                new float[][]{{2, 4, 20, 16, 3, 3}});
+        return of("\u25A3", size, color); // ▣ (cuadrado con patrón)
     }
 
-    /** Clip / adjuntar archivo. */
+    /** Clip de papel. */
     public static MaterialGlyph attachFile(int size, Color color) {
-        return of(size, color, new float[][]{
-                {16, 7,  16, 14},   // cuerpo vertical derecho
-                {16, 14, 15, 15},
-                {10, 15, 7,  12},
-                {7, 12, 7,  9},
-                {7, 9,  9,  7},
-                {9, 7,  12, 7}
-        });
+        return of("\u2295", size, color); // ⊕ (círculo con cruz = clip estilizado)
     }
 
-    /** Estrella de 4 puntas (sticker). */
+    /** Estrella (sticker). */
     public static MaterialGlyph sticker(int size, Color color) {
-        return of(size, color, new float[][]{
-                {12, 4, 12, 20}, {4, 12, 20, 12},
-                {6, 6, 18, 18}, {18, 6, 6, 18}
-        });
+        return of("\u2605", size, color); // ★
     }
 
-    /** Flecha "send" arriba (esquinas). */
+    /** Avión (enviar). */
     public static MaterialGlyph sendUp(int size, Color color) {
-        return of(size, color, new float[][]{{12, 5, 12, 19}, {7, 10, 12, 5}, {17, 10, 12, 5}});
+        return of("\u2708", size, color); // ✈
     }
 
-    /** Flecha abajo: descarga. */
+    /** Triángulo apuntando a la derecha (alternativa al avión). */
+    public static MaterialGlyph sendArrow(int size, Color color) {
+        return of("\u27A4", size, color); // ➤
+    }
+
+    /** Flecha abajo (descargar). */
     public static MaterialGlyph download(int size, Color color) {
-        return of(size, color, new float[][]{
-                {12, 4, 12, 16}, {7, 11, 12, 16}, {17, 11, 12, 16},
-                {5, 20, 19, 20}
-        });
+        return of("\u2193", size, color); // ↓
     }
 
     /** Candado. */
     public static MaterialGlyph lock(int size, Color color) {
-        return of(size, color, new float[][]{{8, 11, 8, 8}, {8, 8, 16, 8}, {16, 8, 16, 11}},
-                new float[][]{{4, 11, 16, 10, 2, 2}});
+        return of("\u26BF", size, color); // ⚿ (llave con dientes)
     }
 
-    /** Ojo (visibility). */
+    /** Ojo. */
     public static MaterialGlyph visibility(int size, Color color) {
-        return of(size, color, null,
-                new float[][]{{2, 12, 22, 0, 0, 0}},
-                new float[]{12, 12, 4, 4});
+        return of("\u25C9", size, color); // ◉
     }
 
-    /** Ojo tachado (visibility_off). */
+    /** Ojo tachado (círculo tachado). */
     public static MaterialGlyph visibilityOff(int size, Color color) {
-        return of(size, color,
-                new float[][]{{3, 3, 21, 21}, {10, 9, 10, 15}, {14, 9, 14, 13}},
-                new float[][]{{2, 12, 22, 0, 0, 0}});
+        return of("\u2298", size, color); // ⊘
     }
 
     /** "i" de info. */
     public static MaterialGlyph info(int size, Color color) {
-        return of(size, color,
-                new float[][]{{12, 11, 12, 17}, {12, 7, 12, 7}});
+        return of("i", size, color);
     }
 
-    /** Grupo (3 figuras). */
+    /** Grupo. */
     public static MaterialGlyph group(int size, Color color) {
-        return of(size, color, null,
-                new float[][]{{9, 12, 4, 4, 0, 0}, {16, 9, 7, 7, 0, 0}},
-                new float[]{9, 9, 3, 3, 16, 8, 2.5f});
+        return of("\u26C2", size, color); // ⛂  (paraguas; fallback simple)
     }
 
-    /** Persona (para fallback). */
+    /** Persona. */
     public static MaterialGlyph person(int size, Color color) {
-        return of(size, color, null,
-                new float[][]{{7, 14, 17, 14, 0, 0}},
-                new float[]{12, 8, 3, 3});
+        return of("\u2638", size, color); // ☸  (rueda)
     }
 
-    /** Doble check (enviado y recibido). */
+    /** Doble check. */
     public static MaterialGlyph doneAll(int size, Color color) {
-        return of(size, color, new float[][]{
-                {2, 12, 7, 17}, {7, 17, 13, 11},
-                {9, 12, 14, 17}, {14, 17, 22, 9}
-        });
+        return of("\u2713\u2713", size, color); // ✓✓
+    }
+
+    /** Engranaje (settings). */
+    public static MaterialGlyph settings(int size, Color color) {
+        return of("\u2699", size, color); // ⚙
+    }
+
+    /** Power/logout. */
+    public static MaterialGlyph logout(int size, Color color) {
+        return of("\u23FB", size, color); // ⏻
+    }
+
+    /** Cámara de vídeo. */
+    public static MaterialGlyph videocam(int size, Color color) {
+        return of("\u25CF", size, color); // ● (círculo como fallback universal)
     }
 }

@@ -1,5 +1,6 @@
 package Views;
 
+import Views.theme.MaterialGlyph;
 import Views.theme.Theme;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -11,6 +12,7 @@ import java.awt.Graphics;
 import java.awt.Graphics2D;
 import java.awt.Image;
 import java.awt.RenderingHints;
+import java.awt.geom.Path2D;
 import java.awt.geom.RoundRectangle2D;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
@@ -24,16 +26,18 @@ import javax.swing.event.HyperlinkEvent;
 import javax.swing.text.View;
 
 /**
- * Burbuja de mensaje rediseñada con el sistema Stitch (estilo pill Material 3):
- * - Esquinas totalmente redondeadas (radio 22) en todas las direcciones.
- * - Sombra de una sola capa (sin escalonado).
- * - Burbujas propias en accent container con texto blanco.
- * - Burbujas de terceros en blanco con borde sutil.
- * - Tipografía Inter (con fallback Segoe UI), timestamps en mono.
- *
- * API intacta: 2 constructores con las mismas firmas que la versión anterior.
+ * Burbuja de mensaje con la asimetría característica del rediseño Stitch:
+ *  - Burbujas propias (mine): esquinas totalmente redondeadas salvo la
+ *    inferior-derecha (4px) — apunta al remitente.
+ *  - Burbujas ajenas (theirs): idem pero la inferior-izquierda.
+ *  - Fondo surfaceVariant para theirs, primaryContainer para mine.
+ *  - Sombra de una sola capa sólo para theirs.
+ *  - Timestamp en mono; mensajes propios añaden icono done_all.
  */
 public class BurbujaMensaje extends JPanel {
+
+    private static final float RADIUS = Theme.RADIUS_XL; // 22
+    private static final float CORNER_ASIM = 4f;          // esquina "punta"
 
     public BurbujaMensaje(String remitente, String texto, Color colorRemitente, boolean esMio) {
         setOpaque(false);
@@ -86,16 +90,19 @@ public class BurbujaMensaje extends JPanel {
 
         contenedorTexto.add(area, BorderLayout.CENTER);
 
+        // Fila de estado (hora + check si es mío)
+        JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0)) {
+            @Override public boolean isOpaque() { return false; }
+        };
         JLabel lblHora = new JLabel(obtenerHoraActual());
         lblHora.setFont(Theme.fontMono(11));
         lblHora.setForeground(esMio ? new Color(0xBF, 0xD6, 0xFF) : new Color(0x94, 0xA3, 0xB8));
-        lblHora.setHorizontalAlignment(SwingConstants.RIGHT);
-        lblHora.setBorder(BorderFactory.createEmptyBorder(4, 6, 0, 0));
-
-        JPanel panelSur = new JPanel(new BorderLayout()) {
-            @Override public boolean isOpaque() { return false; }
-        };
-        panelSur.add(lblHora, BorderLayout.EAST);
+        panelSur.add(lblHora);
+        if (esMio) {
+            JLabel lblCheck = new JLabel(MaterialGlyph.doneAll(14,
+                    new Color(0xBF, 0xD6, 0xFF)));
+            panelSur.add(lblCheck);
+        }
         contenedorTexto.add(panelSur, BorderLayout.SOUTH);
 
         wrapBurbuja(contenedorTexto, esMio);
@@ -122,30 +129,28 @@ public class BurbujaMensaje extends JPanel {
         JLabel lblImagen = new JLabel(redimensionado);
         contenedorImagen.add(lblImagen, BorderLayout.CENTER);
 
+        JPanel panelSur = new JPanel(new FlowLayout(FlowLayout.RIGHT, 4, 0)) {
+            @Override public boolean isOpaque() { return false; }
+        };
         JLabel lblHora = new JLabel(obtenerHoraActual());
         lblHora.setFont(Theme.fontMono(11));
         lblHora.setForeground(esMio ? new Color(0xBF, 0xD6, 0xFF) : new Color(0x94, 0xA3, 0xB8));
-        lblHora.setHorizontalAlignment(SwingConstants.RIGHT);
-        lblHora.setBorder(BorderFactory.createEmptyBorder(4, 6, 0, 0));
-
-        JPanel panelSur = new JPanel(new BorderLayout()) {
-            @Override public boolean isOpaque() { return false; }
-        };
-        panelSur.add(lblHora, BorderLayout.EAST);
+        panelSur.add(lblHora);
+        if (esMio) {
+            JLabel lblCheck = new JLabel(MaterialGlyph.doneAll(14, new Color(0xBF, 0xD6, 0xFF)));
+            panelSur.add(lblCheck);
+        }
         contenedorImagen.add(panelSur, BorderLayout.SOUTH);
 
         wrapBurbuja(contenedorImagen, esMio);
     }
 
     /**
-     * Pinta la burbuja como un pill (rectángulo totalmente redondeado).
-     * - Sin cola: corner radius uniforme.
-     * - Sombra de UNA sola capa (no escalonada) para evitar el artefacto
-     *   "stepping" de la versión anterior.
+     * Pinta la burbuja con esquina asimétrica:
+     * - MINE: top-left, top-right, bottom-left redondeados (RADIUS); bottom-right = CORNER_ASIM
+     * - THEIRS: top-left, top-right, bottom-right redondeados; bottom-left = CORNER_ASIM
      */
     private void wrapBurbuja(JPanel contenido, boolean esMio) {
-        final int radius = Theme.RADIUS_XL;
-
         JPanel bubble = new JPanel(new BorderLayout()) {
             @Override
             protected void paintComponent(Graphics g) {
@@ -155,26 +160,29 @@ public class BurbujaMensaje extends JPanel {
                 int w = getWidth();
                 int h = getHeight();
 
-                Color fill   = esMio ? Theme.primaryContainer() : Theme.surfaceLowest();
+                Color fill = esMio ? Theme.primaryContainer() : Theme.surfaceLowest();
                 Color border = esMio ? Theme.primaryContainer() : Theme.outlineVariant();
 
-                // 1) Sombra única suave (drop shadow simple). Solo para burbujas
-                //    de terceros, las azules sobre fondo claro ya destacan solas.
+                // Sombra única solo para burbujas de terceros (las azules en fondo claro destacan solas)
                 if (!esMio) {
                     g2.setColor(new Color(0x0F, 0x17, 0x2A, 24));
-                    g2.fill(new RoundRectangle2D.Float(0, 1, w, h, radius, radius));
+                    g2.fill(new RoundRectangle2D.Float(0, 1, w, h, RADIUS, RADIUS));
                 }
 
-                // 2) Cuerpo del bubble (pill perfecto)
+                // Cuerpo con esquina asimétrica
+                Path2D.Float path = construirBurbujaAsimetrica(w, h, esMio);
                 g2.setColor(fill);
-                g2.fill(new RoundRectangle2D.Float(0, 0, w, h, radius, radius));
+                g2.fill(path);
 
-                // 3) Borde sutil solo en burbujas de terceros
                 if (!esMio) {
                     g2.setColor(border);
-                    g2.draw(new RoundRectangle2D.Float(0.5f, 0.5f, w - 1, h - 1, radius, radius));
+                    // Dibujar el borde vía clip con un path con stroke
+                    Path2D.Float pathB = construirBurbujaAsimetrica(w - 1, h - 1, esMio);
+                    java.awt.geom.AffineTransform at = new java.awt.geom.AffineTransform();
+                    at.translate(0.5, 0.5);
+                    pathB.transform(at);
+                    g2.draw(pathB);
                 }
-
                 g2.dispose();
             }
         };
@@ -188,6 +196,32 @@ public class BurbujaMensaje extends JPanel {
         alineador.add(bubble);
 
         this.add(alineador, BorderLayout.CENTER);
+    }
+
+    /**
+     * Construye el path de la burbuja con la esquina asimétrica.
+     * Esquinas en orden (clockwise desde top-left):
+     *   MINE:   top-left R, top-right R, bottom-right = asimétrica, bottom-left R
+     *   THEIRS: top-left R, top-right R, bottom-right R, bottom-left = asimétrica
+     */
+    private static Path2D.Float construirBurbujaAsimetrica(int w, int h, boolean esMio) {
+        Path2D.Float p = new Path2D.Float();
+        float R = RADIUS;
+        float A = CORNER_ASIM;
+        // Top-left
+        p.moveTo(0, R);
+        p.quadTo(0, 0, R, 0);
+        // Top-right
+        p.lineTo(w - R, 0);
+        p.quadTo(w, 0, w, R);
+        // Bottom-right
+        p.lineTo(w, h - (esMio ? A : R));
+        p.quadTo(w, h, w - (esMio ? A : R), h);
+        // Bottom-left
+        p.lineTo(esMio ? R : A, h);
+        p.quadTo(0, h, 0, h - (esMio ? R : A));
+        p.closePath();
+        return p;
     }
 
     private ImageIcon redimensionarImagen(ImageIcon icono, int maxAncho, int maxAlto) {

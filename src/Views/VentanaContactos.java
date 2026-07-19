@@ -54,7 +54,12 @@ import javax.swing.border.EmptyBorder;
  *
  * API pública intacta: setContactoListener, setGrupoListener, actualizarLista,
  * actualizarListaGrupos, actualizarGruposPrivados y las dos interfaces.
+ *
+ * @deprecated Esta ventana abre por sí sola en un JFrame. El proyecto ahora
+ *             usa {@link VentanaChatUnificado}, que fusiona sidebar + chat en
+ *             una sola ventana al estilo del rediseño Stitch.
  */
+@Deprecated
 public class VentanaContactos extends JFrame {
 
     /* ---------- Modelos (compatibilidad: el controlador sigue usando actualizarLista, etc.) ---------- */
