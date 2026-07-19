@@ -1,11 +1,27 @@
 package Views;
 
 import Controllers.HistorialChat;
-import java.awt.*;
+import Views.theme.GhostButton;
+import Views.theme.MaterialGlyph;
+import Views.theme.RoundBorder;
+import Views.theme.Theme;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Dimension;
+import java.awt.FlowLayout;
+import java.awt.Font;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
+import java.awt.GridLayout;
+import java.awt.Image;
+import java.awt.Insets;
+import java.awt.Rectangle;
+import java.awt.RenderingHints;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
+import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.Base64;
 import java.util.HashSet;
@@ -13,12 +29,43 @@ import java.util.List;
 import java.util.Set;
 import java.util.regex.Pattern;
 import javax.imageio.ImageIO;
-import javax.swing.*;
+import javax.swing.AbstractAction;
+import javax.swing.BorderFactory;
+import javax.swing.Box;
+import javax.swing.BoxLayout;
+import javax.swing.Icon;
+import javax.swing.ImageIcon;
+import javax.swing.JButton;
+import javax.swing.JComponent;
+import javax.swing.JDialog;
+import javax.swing.JFileChooser;
+import javax.swing.JFrame;
+import javax.swing.JLabel;
+import javax.swing.JOptionPane;
+import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
+import javax.swing.JScrollBar;
+import javax.swing.JScrollPane;
+import javax.swing.JTextArea;
+import javax.swing.JTextField;
+import javax.swing.KeyStroke;
+import javax.swing.SwingConstants;
+import javax.swing.SwingUtilities;
+import javax.swing.Timer;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.LineBorder;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import java.awt.image.BufferedImage;
 
+/**
+ * Rediseño de la ventana de chat con el sistema Stitch:
+ * - Header 64px con back, título y subtítulo dinámico.
+ * - Stream central con day separators ("Hoy", "Ayer", fecha).
+ * - Composer con iconos emoji / imagen / archivo / sticker + textarea + send.
+ * - Panel lateral de búsqueda overlay (anchura 320) con resaltado.
+ *
+ * API pública intacta: mismas firmas que la versión anterior.
+ */
 public class VentanaChat extends JFrame {
 
     private final String miUsuario;
@@ -48,373 +95,284 @@ public class VentanaChat extends JFrame {
         this.contactoDestino = contactoDestino;
         this.esGrupo = esGrupo;
         this.setLayout(new BorderLayout());
-        this.getContentPane().setBackground(new Color(241, 245, 249));
+        this.getContentPane().setBackground(Theme.surfaceLow());
 
-        // --- CABECERA DE CHAT ---
-        JPanel panelCabecera = new JPanel(new BorderLayout());
-        panelCabecera.setBackground(Color.WHITE);
-        panelCabecera.setBorder(new EmptyBorder(10, 15, 10, 15));
+        JPanel root = new JPanel(new BorderLayout());
+        root.setBackground(Theme.surfaceLow());
+        root.add(crearHeader(), BorderLayout.NORTH);
 
-        JLabel lblTituloChat = new JLabel(contactoDestino);
-        lblTituloChat.setFont(new Font("Segoe UI", Font.BOLD, 16));
-        lblTituloChat.setForeground(new Color(15, 23, 42));
-
-        JButton btnActivarBusqueda = new JButton("🔍");
-        btnActivarBusqueda.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 18));
-        btnActivarBusqueda.setFocusable(false);
-        btnActivarBusqueda.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btnActivarBusqueda.setBackground(Color.WHITE);
-        btnActivarBusqueda.setBorder(new EmptyBorder(5, 10, 5, 10));
-
-        panelCabecera.add(lblTituloChat, BorderLayout.WEST);
-        panelCabecera.add(btnActivarBusqueda, BorderLayout.EAST);
+        JPanel lectura = new JPanel(new BorderLayout());
+        lectura.setBackground(Theme.surfaceLow());
+        lectura.setBorder(new EmptyBorder(8, 8, 8, 8));
 
         panelContenedorMensajes = new JPanel();
         panelContenedorMensajes.setLayout(new BoxLayout(panelContenedorMensajes, BoxLayout.Y_AXIS));
-        panelContenedorMensajes.setBackground(new Color(241, 245, 249));
+        panelContenedorMensajes.setBackground(Theme.surfaceLow());
 
-        JPanel panelLectura = new JPanel(new BorderLayout());
-        panelLectura.setBorder(new EmptyBorder(15, 15, 10, 15));
-        panelLectura.setBackground(new Color(241, 245, 249));
-
-        scrollLectura = new JScrollPane(panelContenedorMensajes);
-        scrollLectura.setBorder(new LineBorder(new Color(226, 232, 240), 1, true));
+        scrollLectura = new JScrollPane(panelContenedorMensajes) {
+            @Override protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, java.awt.RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Theme.surfaceLowest());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), 12, 12);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+            @Override public boolean isOpaque() { return false; }
+        };
+        scrollLectura.setOpaque(false);
+        scrollLectura.getViewport().setOpaque(false);
+        scrollLectura.setBorder(new RoundBorder(Theme.RADIUS_LG, Theme.outlineVariant()));
         scrollLectura.getVerticalScrollBar().setUnitIncrement(16);
-        panelLectura.add(scrollLectura, BorderLayout.CENTER);
+        lectura.add(scrollLectura, BorderLayout.CENTER);
 
-        JPanel panelChatCentral = new JPanel(new BorderLayout());
-        panelChatCentral.add(panelCabecera, BorderLayout.NORTH);
-        panelChatCentral.add(panelLectura, BorderLayout.CENTER);
+        root.add(lectura, BorderLayout.CENTER);
+        root.add(crearSouthZone(), BorderLayout.SOUTH);
 
-        // --- PANEL DE BÚSQUEDA LATERAL ---
+        this.add(root, BorderLayout.CENTER);
+
+        // Panel de búsqueda (overlay derecho; inicialmente oculto)
         panelBusqueda = crearPanelBusqueda();
         panelBusqueda.setVisible(false);
-
-        btnActivarBusqueda.addActionListener(e -> {
-            boolean estaVisible = panelBusqueda.isVisible();
-            panelBusqueda.setVisible(!estaVisible);
-            if (!estaVisible) {
-                this.setSize(800, 560);
-                btnActivarBusqueda.setForeground(new Color(37, 99, 235));
-            } else {
-                this.setSize(480, 560);
-                btnActivarBusqueda.setForeground(new Color(15, 23, 42));
-            }
-            this.revalidate();
-        });
-
-        this.add(panelChatCentral, BorderLayout.CENTER);
         this.add(panelBusqueda, BorderLayout.EAST);
 
-        taInputMensaje = new JTextArea(2, 20);
-        taInputMensaje.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 14));
-        taInputMensaje.setLineWrap(true);
-        taInputMensaje.setWrapStyleWord(true);
-        taInputMensaje.setBorder(new EmptyBorder(6, 8, 6, 8));
-
-        JScrollPane scrollInput = new JScrollPane(taInputMensaje);
-        scrollInput.setBorder(new LineBorder(new Color(203, 213, 225), 1, true));
-
-        lblEscribiendo = new JLabel(" ");
-        lblEscribiendo.setFont(new Font("Segoe UI", Font.ITALIC, 11));
-        lblEscribiendo.setForeground(new Color(100, 116, 139));
-        lblEscribiendo.setBorder(new EmptyBorder(0, 5, 2, 0));
-
-        configurarDetectorEscritura();
-
-        JButton btnAbrirEmojis = new JButton("😀");
-        btnAbrirEmojis.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 18));
-        btnAbrirEmojis.setBackground(Color.WHITE);
-        btnAbrirEmojis.setBorder(new EmptyBorder(4, 8, 4, 4));
-        btnAbrirEmojis.setFocusable(false);
-        btnAbrirEmojis.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        JButton btnAdjuntarImagen = new JButton(new FotoIcon());
-        btnAdjuntarImagen.setToolTipText("Adjuntar Imagen");
-        btnAdjuntarImagen.setBackground(Color.WHITE);
-        btnAdjuntarImagen.setBorder(new EmptyBorder(4, 6, 4, 6));
-        btnAdjuntarImagen.setFocusable(false);
-        btnAdjuntarImagen.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        JButton btnAdjuntarArchivo = new JButton(new ClipIcon());
-        btnAdjuntarArchivo.setToolTipText("Adjuntar Documento");
-        btnAdjuntarArchivo.setBackground(Color.WHITE);
-        btnAdjuntarArchivo.setBorder(new EmptyBorder(4, 4, 4, 8));
-        btnAdjuntarArchivo.setFocusable(false);
-        btnAdjuntarArchivo.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        JButton btnStickers = new JButton(new StickerIcon());
-        btnStickers.setToolTipText("Enviar sticker");
-        btnStickers.setBackground(Color.WHITE);
-        btnStickers.setBorder(new EmptyBorder(4, 4, 4, 4));
-        btnStickers.setFocusable(false);
-        btnStickers.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        jbtnEnviar = new JButton("Enviar");
-        jbtnEnviar.setFont(new Font("Segoe UI", Font.BOLD, 13));
-        jbtnEnviar.setForeground(Color.WHITE);
-        jbtnEnviar.setBackground(new Color(37, 99, 235));
-        jbtnEnviar.setBorder(new EmptyBorder(0, 18, 0, 18));
-        jbtnEnviar.setFocusable(false);
-        jbtnEnviar.setCursor(new Cursor(Cursor.HAND_CURSOR));
-
-        jbtnEnviar.addMouseListener(new java.awt.event.MouseAdapter() {
-            public void mouseEntered(java.awt.event.MouseEvent evt) { jbtnEnviar.setBackground(new Color(29, 78, 216)); }
-            public void mouseExited(java.awt.event.MouseEvent evt) { jbtnEnviar.setBackground(new Color(37, 99, 235)); }
-        });
-
-        taInputMensaje.getInputMap().put(KeyStroke.getKeyStroke("ENTER"), "enviar");
-        taInputMensaje.getActionMap().put("enviar", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) { jbtnEnviar.doClick(); }
-        });
-        taInputMensaje.getInputMap().put(KeyStroke.getKeyStroke("shift ENTER"), "saltoLinea");
-        taInputMensaje.getActionMap().put("saltoLinea", new AbstractAction() {
-            @Override
-            public void actionPerformed(ActionEvent e) { taInputMensaje.append("\n"); }
-        });
-
-        btnAbrirEmojis.addActionListener(e -> {
-            JPopupMenu menu = crearPanelEmojis();
-            menu.show(btnAbrirEmojis, 0, -menu.getPreferredSize().height - 5);
-        });
-
-        btnAdjuntarImagen.addActionListener(e -> {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Selecciona una Imagen para enviar");
-            fileChooser.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter(
-                    "Imágenes (JPG, PNG)", "jpg", "jpeg", "png"
-            ));
-            if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                if (accionEnviarImagen != null) accionEnviarImagen.accept(fileChooser.getSelectedFile());
-            }
-        });
-
-        btnAdjuntarArchivo.addActionListener(e -> {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Selecciona un Documento para enviar");
-            if (fileChooser.showOpenDialog(this) == JFileChooser.APPROVE_OPTION) {
-                if (accionEnviarArchivo != null) accionEnviarArchivo.accept(fileChooser.getSelectedFile());
-            }
-        });
-
-        btnStickers.addActionListener(e -> {
-            JPopupMenu menu = crearPanelStickers();
-            menu.show(btnStickers, 0, -menu.getPreferredSize().height - 5);
-        });
-
-        JPanel panelBotones = new JPanel(new BorderLayout(10, 0));
-        panelBotones.setBackground(new Color(241, 245, 249));
-
-        JPanel panelHerramientas = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 0));
-        panelHerramientas.setBackground(Color.WHITE);
-        panelHerramientas.add(btnAbrirEmojis);
-        panelHerramientas.add(btnAdjuntarImagen);
-        panelHerramientas.add(btnStickers);
-        panelHerramientas.add(btnAdjuntarArchivo);
-
-        JPanel wrapperAuxiliares = new JPanel(new BorderLayout());
-        wrapperAuxiliares.setBackground(Color.WHITE);
-        wrapperAuxiliares.setBorder(new LineBorder(new Color(203, 213, 225), 1, true));
-        wrapperAuxiliares.add(panelHerramientas, BorderLayout.CENTER);
-
-        panelBotones.add(wrapperAuxiliares, BorderLayout.WEST);
-        panelBotones.add(jbtnEnviar, BorderLayout.CENTER);
-
-        JPanel filaInput = new JPanel(new BorderLayout(10, 0));
-        filaInput.setOpaque(false);
-        filaInput.add(scrollInput, BorderLayout.CENTER);
-        filaInput.add(panelBotones, BorderLayout.EAST);
-
-        JPanel panelFilaMensaje = new JPanel(new BorderLayout(0, 0));
-        panelFilaMensaje.setBackground(new Color(241, 245, 249));
-        panelFilaMensaje.setBorder(new EmptyBorder(0, 15, 15, 15));
-
-        panelFilaMensaje.add(lblEscribiendo, BorderLayout.NORTH);
-        panelFilaMensaje.add(filaInput, BorderLayout.CENTER);
-
-        this.add(panelFilaMensaje, BorderLayout.SOUTH);
-        this.setSize(480, 560);
+        this.setSize(520, 640);
         this.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
         this.setLocationRelativeTo(null);
     }
 
-    private JPanel crearPanelBusqueda() {
-        JPanel panel = new JPanel(new BorderLayout());
-        panel.setPreferredSize(new Dimension(300, 0));
-        panel.setBackground(new Color(248, 250, 252));
-        panel.setBorder(new LineBorder(new Color(203, 213, 225), 1, false));
+    /* ============================ HEADER ============================ */
 
-        JPanel headerBusqueda = new JPanel(new BorderLayout());
-        headerBusqueda.setBackground(Color.WHITE);
-        headerBusqueda.setBorder(new EmptyBorder(12, 15, 12, 15));
-        JLabel lblTitulo = new JLabel("Buscar mensajes");
-        lblTitulo.setFont(new Font("Segoe UI", Font.BOLD, 14));
-        headerBusqueda.add(lblTitulo, BorderLayout.CENTER);
+    private JPanel crearHeader() {
+        JPanel header = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setColor(Theme.surfaceLowest());
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.setColor(Theme.outlineVariant());
+                g2.drawLine(0, getHeight() - 1, getWidth(), getHeight() - 1);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+            @Override public boolean isOpaque() { return false; }
+        };
+        header.setOpaque(false);
+        header.setBorder(new EmptyBorder(10, 8, 10, 8));
 
-        JTextField txtBuscar = new JTextField();
-        txtBuscar.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        txtBuscar.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(new Color(203, 213, 225), 1, true),
-                new EmptyBorder(6, 10, 6, 10)
-        ));
+        // Left side (back + title)
+        JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 0));
+        left.setOpaque(false);
 
-        JPanel panelInput = new JPanel(new BorderLayout());
-        panelInput.setBackground(Color.WHITE);
-        panelInput.setBorder(new EmptyBorder(0, 15, 15, 15));
-        panelInput.add(txtBuscar, BorderLayout.CENTER);
+        JButton btnBack = iconButton(MaterialGlyph.arrowBack(22, Theme.onSurfaceVariant()), "Volver");
+        btnBack.setPreferredSize(new Dimension(36, 36));
+        btnBack.addActionListener(e -> dispose());
+        left.add(btnBack);
 
-        JPanel panelTopBusqueda = new JPanel(new BorderLayout());
-        panelTopBusqueda.add(headerBusqueda, BorderLayout.NORTH);
-        panelTopBusqueda.add(panelInput, BorderLayout.SOUTH);
+        JLabel lblTitulo = new JLabel("# " + contactoDestino);
+        lblTitulo.setFont(Theme.font(16, Font.BOLD));
+        lblTitulo.setForeground(Theme.onSurface());
+        lblTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JPanel panelResultados = new JPanel();
-        panelResultados.setLayout(new BoxLayout(panelResultados, BoxLayout.Y_AXIS));
-        panelResultados.setBackground(new Color(248, 250, 252));
+        JLabel lblSub = new JLabel(esGrupo ? "Grupo · múltiples miembros" : "Conversación privada");
+        lblSub.setFont(Theme.font(11, Font.PLAIN));
+        lblSub.setForeground(Theme.onSurfaceVariant());
+        lblSub.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JScrollPane scrollBusqueda = new JScrollPane(panelResultados);
-        scrollBusqueda.setBorder(null);
-        scrollBusqueda.getVerticalScrollBar().setUnitIncrement(16);
+        JPanel subWrap = new JPanel();
+        subWrap.setOpaque(false);
+        subWrap.setLayout(new BoxLayout(subWrap, BoxLayout.Y_AXIS));
+        subWrap.add(lblTitulo);
+        subWrap.add(Box.createVerticalStrut(1));
+        subWrap.add(lblSub);
+        left.add(subWrap);
 
-        panel.add(panelTopBusqueda, BorderLayout.NORTH);
-        panel.add(scrollBusqueda, BorderLayout.CENTER);
+        header.add(left, BorderLayout.WEST);
 
-        txtBuscar.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { ejecutarBusqueda(); }
-            public void removeUpdate(DocumentEvent e) { ejecutarBusqueda(); }
-            public void changedUpdate(DocumentEvent e) { ejecutarBusqueda(); }
+        // Right actions: solo buscador. El ⋮ que tenía no hacía nada.
+        JPanel right = new JPanel(new FlowLayout(FlowLayout.RIGHT, 0, 0));
+        right.setOpaque(false);
+        JButton btnSearch = iconButton(MaterialGlyph.search(22, Theme.onSurfaceVariant()), "Buscar en la conversación");
+        btnSearch.setPreferredSize(new Dimension(36, 36));
+        btnSearch.addActionListener(e -> togglePanelBusqueda());
+        right.add(btnSearch);
+        header.add(right, BorderLayout.EAST);
 
-            private void ejecutarBusqueda() {
-                String filtro = txtBuscar.getText();
-                panelResultados.removeAll();
+        return header;
+    }
 
-                if (!filtro.trim().isEmpty()) {
-                    List<String> encontrados = HistorialChat.buscarMensajes(miUsuario, contactoDestino, filtro, esGrupo);
-                    for (String linea : encontrados) {
-                        panelResultados.add(crearItemResultado(linea, filtro));
-                        panelResultados.add(Box.createVerticalStrut(4));
-                    }
-                }
-                panelResultados.revalidate();
-                panelResultados.repaint();
+    private void togglePanelBusqueda() {
+        boolean show = !panelBusqueda.isVisible();
+        panelBusqueda.setVisible(show);
+        if (show) {
+            this.setSize(820, 640);
+        } else {
+            this.setSize(520, 640);
+        }
+        this.revalidate();
+    }
+
+    /* ============================ SOUTH (composer + typing) ============================ */
+
+    private JPanel crearSouthZone() {
+        JPanel south = new JPanel(new BorderLayout(0, 4));
+        south.setBackground(Theme.background());
+        south.setBorder(new EmptyBorder(0, 12, 12, 12));
+
+        // Typing indicator
+        lblEscribiendo = new JLabel(" ");
+        lblEscribiendo.setFont(Theme.font(12, Font.ITALIC));
+        lblEscribiendo.setForeground(Theme.onSurfaceVariant());
+        lblEscribiendo.setBorder(new EmptyBorder(0, 8, 2, 0));
+        south.add(lblEscribiendo, BorderLayout.NORTH);
+
+        // === Composer bar: UNA SOLA row en BoxLayout(X_AXIS) ===
+        //   Orden: [textarea (grow) | 4 botones (40×40) | enviar (40×40)]
+        JPanel composerBar = new JPanel() {
+            @Override public boolean isOpaque() { return false; }
+        };
+        composerBar.setLayout(new BoxLayout(composerBar, BoxLayout.X_AXIS));
+        composerBar.setBackground(Theme.surfaceLowest());
+        composerBar.setBorder(BorderFactory.createCompoundBorder(
+                new RoundBorder(Theme.RADIUS_XL, Theme.outlineVariant()),
+                new EmptyBorder(4, 12, 4, 6)));
+
+        Dimension btnSize = new Dimension(40, 40);
+
+        // --- 1) Textarea (grow) ---
+        taInputMensaje = new JTextArea(1, 20);
+        taInputMensaje.setFont(Theme.fontEmoji(15, Font.PLAIN));
+        taInputMensaje.setLineWrap(true);
+        taInputMensaje.setWrapStyleWord(true);
+        taInputMensaje.setForeground(Theme.onSurface());
+        taInputMensaje.setBackground(Theme.surfaceLowest());
+        taInputMensaje.setCaretColor(Theme.primary());
+        taInputMensaje.setBorder(new EmptyBorder(4, 4, 4, 4));
+        taInputMensaje.setOpaque(false);
+        taInputMensaje.setMaximumSize(new Dimension(Integer.MAX_VALUE, 44));
+
+        JScrollPane inputScroll = new JScrollPane(taInputMensaje);
+        inputScroll.setOpaque(false);
+        inputScroll.getViewport().setOpaque(false);
+        inputScroll.setBorder(null);
+        inputScroll.setHorizontalScrollBarPolicy(JScrollPane.HORIZONTAL_SCROLLBAR_NEVER);
+        inputScroll.getVerticalScrollBar().setUnitIncrement(14);
+
+        composerBar.add(inputScroll);
+        composerBar.add(Box.createHorizontalGlue()); // Hace que textarea crezca
+
+        // --- 2) Toolbar con 4 botones (entre texto y enviar) ---
+        JPanel toolbar = new JPanel() {
+            @Override public boolean isOpaque() { return false; }
+        };
+        toolbar.setLayout(new BoxLayout(toolbar, BoxLayout.X_AXIS));
+        toolbar.setBackground(Theme.surfaceLowest());
+
+        JButton btnEmoji = iconButton(MaterialGlyph.emoji(20, Theme.onSurfaceVariant()), "Emojis");
+        btnEmoji.setPreferredSize(btnSize);
+        btnEmoji.setMaximumSize(btnSize);
+        btnEmoji.setMinimumSize(btnSize);
+        btnEmoji.addActionListener(e -> {
+            JPopupMenu menu = crearPopupEmojis();
+            menu.show(btnEmoji, 0, -menu.getPreferredSize().height - 6);
+        });
+        toolbar.add(btnEmoji);
+
+        JButton btnImage = iconButton(MaterialGlyph.image(20, Theme.onSurfaceVariant()), "Adjuntar imagen");
+        btnImage.setPreferredSize(btnSize);
+        btnImage.setMaximumSize(btnSize);
+        btnImage.setMinimumSize(btnSize);
+        btnImage.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser();
+            fc.setDialogTitle("Selecciona una imagen para enviar");
+            fc.setFileFilter(new javax.swing.filechooser.FileNameExtensionFilter("Imágenes (JPG, PNG)", "jpg", "jpeg", "png"));
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION && accionEnviarImagen != null) {
+                accionEnviarImagen.accept(fc.getSelectedFile());
             }
         });
+        toolbar.add(btnImage);
 
-        return panel;
-    }
-
-    private JPanel crearItemResultado(String linea, String filtro) {
-        JPanel item = new JPanel(new BorderLayout());
-        item.setBackground(Color.WHITE);
-        item.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(new Color(226, 232, 240), 1),
-                new EmptyBorder(10, 15, 10, 15)
-        ));
-        item.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
-
-        try {
-            int idxCierre = linea.indexOf("] ");
-            String fecha = linea.substring(1, 11);
-            String resto = linea.substring(idxCierre + 2);
-            int idxDosPuntos = resto.indexOf(": ");
-
-            if (idxCierre == -1 || idxDosPuntos == -1) throw new Exception();
-
-            String remitente = resto.substring(0, idxDosPuntos);
-            String mensaje = resto.substring(idxDosPuntos + 2);
-
-            JLabel lblFecha = new JLabel(fecha);
-            lblFecha.setFont(new Font("Segoe UI", Font.PLAIN, 11));
-            lblFecha.setForeground(new Color(100, 116, 139));
-            lblFecha.setBorder(new EmptyBorder(0, 0, 4, 0));
-
-            String regex = "(?i)(" + Pattern.quote(filtro) + ")";
-            String mensajeResaltado = mensaje.replaceAll(regex, "<b style='color: #16a34a;'>$1</b>");
-
-            JLabel lblMensaje = new JLabel("<html><div style='width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>"
-                    + "<b>" + remitente + ":</b> " + mensajeResaltado + "</div></html>");
-            lblMensaje.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-            lblMensaje.setForeground(new Color(15, 23, 42));
-
-            item.add(lblFecha, BorderLayout.NORTH);
-            item.add(lblMensaje, BorderLayout.CENTER);
-
-            final String textoBurbuja = mensaje;
-            item.setCursor(new Cursor(Cursor.HAND_CURSOR));
-            item.addMouseListener(new java.awt.event.MouseAdapter() {
-                @Override
-                public void mouseClicked(java.awt.event.MouseEvent evt) {
-                    realizarScrollHaciaMensaje(textoBurbuja);
-                }
-                @Override
-                public void mouseEntered(java.awt.event.MouseEvent evt) { item.setBackground(new Color(239, 246, 255)); }
-                @Override
-                public void mouseExited(java.awt.event.MouseEvent evt) { item.setBackground(Color.WHITE); }
-            });
-
-        } catch (Exception e) {
-            JLabel lblFallback = new JLabel(linea);
-            lblFallback.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-            item.add(lblFallback, BorderLayout.CENTER);
-        }
-
-        return item;
-    }
-
-    private void realizarScrollHaciaMensaje(String textoBurbuja) {
-        if (textoBurbuja == null || textoBurbuja.isEmpty()) return;
-        Component[] componentes = panelContenedorMensajes.getComponents();
-        for (int i = componentes.length - 1; i >= 0; i--) {
-            BurbujaMensaje burbuja = encontrarBurbuja(componentes[i]);
-            if (burbuja != null) {
-                String textoReal = obtenerTextoBurbuja(burbuja);
-                if (textoReal != null && textoReal.contains(textoBurbuja)) {
-                    scrollHaciaBurbuja(burbuja);
-                    return;
-                }
+        JButton btnFile = iconButton(MaterialGlyph.attachFile(20, Theme.onSurfaceVariant()), "Adjuntar documento");
+        btnFile.setPreferredSize(btnSize);
+        btnFile.setMaximumSize(btnSize);
+        btnFile.setMinimumSize(btnSize);
+        btnFile.addActionListener(e -> {
+            JFileChooser fc = new JFileChooser();
+            fc.setDialogTitle("Selecciona un documento para enviar");
+            if (fc.showOpenDialog(this) == JFileChooser.APPROVE_OPTION && accionEnviarArchivo != null) {
+                accionEnviarArchivo.accept(fc.getSelectedFile());
             }
-        }
-    }
-
-    private BurbujaMensaje encontrarBurbuja(Component comp) {
-        if (comp instanceof BurbujaMensaje) return (BurbujaMensaje) comp;
-        if (comp instanceof Container) {
-            for (Component c : ((Container) comp).getComponents()) {
-                BurbujaMensaje b = encontrarBurbuja(c);
-                if (b != null) return b;
-            }
-        }
-        return null;
-    }
-
-    private String obtenerTextoBurbuja(Component comp) {
-        if (comp instanceof JEditorPane) {
-            try {
-                javax.swing.text.Document doc = ((JEditorPane) comp).getDocument();
-                return doc.getText(0, doc.getLength()).replace("\u200B", "");
-            } catch (Exception ex) {
-                return null;
-            }
-        }
-        if (comp instanceof Container) {
-            for (Component c : ((Container) comp).getComponents()) {
-                String t = obtenerTextoBurbuja(c);
-                if (t != null && !t.trim().isEmpty()) return t;
-            }
-        }
-        return null;
-    }
-
-    private void scrollHaciaBurbuja(BurbujaMensaje burbuja) {
-        SwingUtilities.invokeLater(() -> {
-            Container padre = burbuja.getParent();
-            if (padre == null) return;
-            Point pt = SwingUtilities.convertPoint(padre, burbuja.getLocation(), panelContenedorMensajes);
-            JScrollBar vertical = scrollLectura.getVerticalScrollBar();
-            int destino = Math.max(0, pt.y - 20);
-            vertical.setValue(destino);
         });
+        toolbar.add(btnFile);
+
+        JButton btnSticker = iconButton(MaterialGlyph.sticker(20, Theme.onSurfaceVariant()), "Stickers");
+        btnSticker.setPreferredSize(btnSize);
+        btnSticker.setMaximumSize(btnSize);
+        btnSticker.setMinimumSize(btnSize);
+        btnSticker.addActionListener(e -> {
+            JPopupMenu menu = crearPopupStickers();
+            menu.show(btnSticker, 0, -menu.getPreferredSize().height - 6);
+        });
+        toolbar.add(btnSticker);
+
+        composerBar.add(toolbar);
+
+        // Glue pequeño entre toolbar y enviar (separador 4px)
+        composerBar.add(Box.createHorizontalStrut(4));
+
+        // --- 3) Botón enviar ---
+        jbtnEnviar = new JButton(MaterialGlyph.sendUp(20, Color.WHITE)) {
+            @Override protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                boolean enabled = jbtnEnviar.isEnabled();
+                g2.setColor(enabled ? Theme.primary() : Theme.outlineVariant());
+                g2.fillOval(0, 0, getWidth(), getHeight());
+                g2.dispose();
+                super.paintComponent(g);
+            }
+            @Override public boolean isContentAreaFilled() { return false; }
+            @Override public boolean isOpaque() { return false; }
+        };
+        jbtnEnviar.setPreferredSize(btnSize);
+        jbtnEnviar.setMaximumSize(btnSize);
+        jbtnEnviar.setMinimumSize(btnSize);
+        jbtnEnviar.setFocusPainted(false);
+        jbtnEnviar.setBorderPainted(false);
+        jbtnEnviar.setContentAreaFilled(false);
+        jbtnEnviar.setOpaque(false);
+        jbtnEnviar.setBorder(null);
+        jbtnEnviar.setMargin(new Insets(0, 0, 0, 0));
+        jbtnEnviar.setIconTextGap(0);
+        jbtnEnviar.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        jbtnEnviar.setEnabled(false);
+        composerBar.add(jbtnEnviar);
+
+        south.add(composerBar, BorderLayout.CENTER);
+
+        // Habilitar send cuando hay texto
+        taInputMensaje.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { jbtnEnviar.setEnabled(taInputMensaje.getText().trim().length() > 0); }
+            public void removeUpdate(DocumentEvent e) { jbtnEnviar.setEnabled(taInputMensaje.getText().trim().length() > 0); }
+            public void changedUpdate(DocumentEvent e) { jbtnEnviar.setEnabled(taInputMensaje.getText().trim().length() > 0); }
+        });
+
+        // ENTER envía, SHIFT+ENTER salto de línea
+        taInputMensaje.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "enviar");
+        taInputMensaje.getActionMap().put("enviar", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) {
+                if (jbtnEnviar.isEnabled()) jbtnEnviar.doClick();
+            }
+        });
+        taInputMensaje.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, KeyEvent.SHIFT_DOWN_MASK), "salto");
+        taInputMensaje.getActionMap().put("salto", new AbstractAction() {
+            @Override public void actionPerformed(ActionEvent e) { taInputMensaje.append("\n"); }
+        });
+
+        configurarDetectorEscritura();
+        return south;
     }
+
+    /* ============================ Detector de typing ============================ */
 
     private void configurarDetectorEscritura() {
         timerEscribiendo = new Timer(1500, e -> {
@@ -424,15 +382,14 @@ public class VentanaChat extends JFrame {
             }
         });
         timerEscribiendo.setRepeats(false);
-
-        taInputMensaje.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
-            public void insertUpdate(javax.swing.event.DocumentEvent e) { avisarEscribiendo(); }
-            public void removeUpdate(javax.swing.event.DocumentEvent e) { avisarEscribiendo(); }
-            public void changedUpdate(javax.swing.event.DocumentEvent e) { avisarEscribiendo(); }
+        taInputMensaje.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { avisar(); }
+            public void removeUpdate(DocumentEvent e) { avisar(); }
+            public void changedUpdate(DocumentEvent e) { avisar(); }
         });
     }
 
-    private void avisarEscribiendo() {
+    private void avisar() {
         if (!isTyping && taInputMensaje.getText().length() > 0) {
             isTyping = true;
             if (accionEscribiendo != null) accionEscribiendo.accept(true);
@@ -446,172 +403,308 @@ public class VentanaChat extends JFrame {
         }
     }
 
-    // Para Chat de 2 personas
-    public void mostrarEscribiendo(boolean escribiendo) {
-        SwingUtilities.invokeLater(() -> {
-            lblEscribiendo.setText(escribiendo ? "escribiendo..." : " ");
-        });
-    }
+    /* ============================ Panel de búsqueda lateral ============================ */
 
-    // Para Chat Grupal: rastrea múltiples personas escribiendo simultáneamente
-    public void mostrarEscribiendoGrupal(String remitente, boolean escribiendo) {
-        SwingUtilities.invokeLater(() -> {
-            if (escribiendo) {
-                usuariosEscribiendo.add(remitente);
-            } else {
-                usuariosEscribiendo.remove(remitente);
+    private JPanel crearPanelBusqueda() {
+        JPanel p = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setColor(Theme.surfaceLowest());
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.setColor(Theme.outlineVariant());
+                g2.drawLine(0, 0, 0, getHeight());
+                g2.dispose();
+                super.paintComponent(g);
             }
+            @Override public boolean isOpaque() { return false; }
+        };
+        p.setOpaque(false);
+        p.setPreferredSize(new Dimension(300, 0));
+        p.setBorder(new EmptyBorder(0, 0, 0, 0));
 
-            if (usuariosEscribiendo.isEmpty()) {
-                lblEscribiendo.setText(" ");
-            } else if (usuariosEscribiendo.size() == 1) {
-                lblEscribiendo.setText(usuariosEscribiendo.iterator().next() + " está escribiendo...");
-            } else {
-                lblEscribiendo.setText("Varios usuarios están escribiendo...");
+        // Header
+        JPanel head = new JPanel(new BorderLayout());
+        head.setOpaque(false);
+        head.setBackground(Theme.surfaceLowest());
+        head.setBorder(new EmptyBorder(16, 16, 8, 16));
+        JLabel lbl = new JLabel("Buscar mensajes");
+        lbl.setFont(Theme.font(15, Font.BOLD));
+        lbl.setForeground(Theme.onSurface());
+        head.add(lbl, BorderLayout.WEST);
+        JButton btnCerrar = iconButton(MaterialGlyph.close(18, Theme.onSurfaceVariant()), "Cerrar");
+        btnCerrar.addActionListener(e -> togglePanelBusqueda());
+        head.add(btnCerrar, BorderLayout.EAST);
+        p.add(head, BorderLayout.NORTH);
+
+        // Input buscar
+        JPanel inputRow = new JPanel(new BorderLayout()) {
+            @Override protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Theme.surfaceLow());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), Theme.RADIUS_MD, Theme.RADIUS_MD);
+                g2.dispose();
+                super.paintComponent(g);
             }
-        });
-    }
+            @Override public boolean isOpaque() { return false; }
+        };
+        inputRow.setOpaque(false);
+        inputRow.setBorder(new EmptyBorder(0, 12, 0, 12));
+        inputRow.setPreferredSize(new Dimension(0, 38));
 
-    private JPopupMenu crearPanelEmojis() {
-        JPopupMenu panelEmojis = new JPopupMenu();
-        panelEmojis.setLayout(new GridLayout(3, 4, 2, 2));
-        panelEmojis.setBackground(Color.WHITE);
-        panelEmojis.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(new Color(203, 213, 225), 1),
-                new EmptyBorder(5, 5, 5, 5)
-        ));
+        JTextField txtBuscar = new JTextField("Buscar…") {
+            @Override public boolean isOpaque() { return false; }
+        };
+        txtBuscar.setOpaque(false);
+        txtBuscar.setBorder(null);
+        txtBuscar.setFont(Theme.fontBase());
+        txtBuscar.setForeground(Theme.onSurface());
 
-        String[] emojis = {"😀", "😂", "😊", "😍", "🤔", "😥", "😡", "👍", "🙌", "🔥", "🎉", "❤️"};
-        for (String emoji : emojis) {
-            JButton btnEmoji = new JButton(emoji);
-            btnEmoji.setFont(new Font("Segoe UI Emoji", Font.PLAIN, 20));
-            btnEmoji.setBackground(Color.WHITE);
-            btnEmoji.setBorder(new EmptyBorder(2, 2, 2, 2));
-            btnEmoji.setFocusable(false);
-            btnEmoji.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        inputRow.add(new JLabel(MaterialGlyph.search(18, Theme.onSurfaceVariant())), BorderLayout.WEST);
+        inputRow.add(txtBuscar, BorderLayout.CENTER);
 
-            btnEmoji.addActionListener(e -> {
-                taInputMensaje.append(emoji);
-                taInputMensaje.requestFocus();
-                panelEmojis.setVisible(false);
-            });
-            panelEmojis.add(btnEmoji);
-        }
-        panelEmojis.setPreferredSize(new Dimension(260, 150));
-        return panelEmojis;
-    }
+        JPanel top = new JPanel(new BorderLayout());
+        top.setOpaque(false);
+        top.setBorder(new EmptyBorder(0, 16, 12, 16));
+        top.add(inputRow, BorderLayout.CENTER);
+        p.add(top, BorderLayout.NORTH);
 
-    private JPopupMenu crearPanelStickers() {
-        JPopupMenu panelStickers = new JPopupMenu();
-        panelStickers.setBackground(Color.WHITE);
+        // Resultados
+        JPanel panelResultados = new JPanel();
+        panelResultados.setLayout(new BoxLayout(panelResultados, BoxLayout.Y_AXIS));
+        panelResultados.setBackground(Theme.surfaceLowest());
+        panelResultados.setOpaque(true);
 
-        File carpetaStickers = new File("stickers");
-        if (!carpetaStickers.exists()) {
-            carpetaStickers.mkdir();
-        }
+        JScrollPane scrollR = new JScrollPane(panelResultados);
+        scrollR.setOpaque(false);
+        scrollR.getViewport().setOpaque(false);
+        scrollR.setBorder(null);
+        scrollR.getVerticalScrollBar().setUnitIncrement(14);
+        p.add(scrollR, BorderLayout.CENTER);
 
-        File[] archivos = carpetaStickers.listFiles((dir, name) -> {
-            String nomLower = name.toLowerCase();
-            return nomLower.endsWith(".png") || nomLower.endsWith(".jpg")
-                    || nomLower.endsWith(".jpeg") || nomLower.endsWith(".gif");
-        });
-
-        if (archivos == null || archivos.length == 0) {
-            JLabel lblInfo = new JLabel(
-                    "<html><center>Carpeta <b>stickers/</b> vacía.<br>Guarda imágenes PNG o JPG allí.</center></html>",
-                    SwingConstants.CENTER);
-            lblInfo.setFont(new Font("Segoe UI", Font.PLAIN, 12));
-            lblInfo.setForeground(new Color(100, 116, 139));
-            lblInfo.setBorder(new EmptyBorder(15, 15, 15, 15));
-            lblInfo.setBackground(Color.WHITE);
-            lblInfo.setOpaque(true);
-            panelStickers.add(lblInfo);
-            panelStickers.setPreferredSize(new Dimension(240, 90));
-            return panelStickers;
-        }
-
-        int columnas = 3;
-        int filas = (int) Math.ceil((double) archivos.length / columnas);
-        JPanel panelCuadricula = new JPanel(new GridLayout(filas, columnas, 6, 6));
-        panelCuadricula.setBackground(Color.WHITE);
-        panelCuadricula.setBorder(new EmptyBorder(6, 6, 6, 6));
-
-        for (File archivo : archivos) {
-            try {
-                BufferedImage original = ImageIO.read(archivo);
-                if (original == null) continue;
-
-                BufferedImage miniatura = redimensionarBuffered(original, 55, 55);
-                ImageIcon iconoSticker = new ImageIcon(miniatura);
-
-                JButton btnSticker = new JButton(iconoSticker);
-                btnSticker.setBackground(new Color(248, 250, 252));
-                btnSticker.setBorder(new LineBorder(new Color(226, 232, 240), 1, true));
-                btnSticker.setFocusable(false);
-                btnSticker.setCursor(new Cursor(Cursor.HAND_CURSOR));
-                btnSticker.setToolTipText(archivo.getName());
-
-                btnSticker.addActionListener(e -> {
-                    BufferedImage stickerEstandar = redimensionarBuffered(original, 120, 120);
-                    String base64 = bufferedToBase64(stickerEstandar);
-                    if (base64 != null && accionEnviarSticker != null) {
-                        accionEnviarSticker.accept(base64);
+        txtBuscar.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { ejecutar(); }
+            public void removeUpdate(DocumentEvent e) { ejecutar(); }
+            public void changedUpdate(DocumentEvent e) { ejecutar(); }
+            private void ejecutar() {
+                String filtro = txtBuscar.getText();
+                panelResultados.removeAll();
+                if (!filtro.trim().isEmpty()) {
+                    List<String> matches = HistorialChat.buscarMensajes(miUsuario, contactoDestino, filtro, esGrupo);
+                    for (String linea : matches) {
+                        panelResultados.add(crearItemResultado(linea, filtro));
+                        panelResultados.add(Box.createVerticalStrut(6));
                     }
-                    panelStickers.setVisible(false);
-                });
-
-                panelCuadricula.add(btnSticker);
-            } catch (Exception ex) {
-                System.err.println("Error al cargar sticker: " + archivo.getName());
+                }
+                panelResultados.revalidate();
+                panelResultados.repaint();
             }
-        }
+        });
 
-        JPanel panelAlineador = new JPanel(new BorderLayout());
-        panelAlineador.setBackground(Color.WHITE);
-        panelAlineador.add(panelCuadricula, BorderLayout.NORTH);
-
-        JScrollPane scrollStickers = new JScrollPane(panelAlineador);
-        scrollStickers.setBorder(null);
-        scrollStickers.getVerticalScrollBar().setUnitIncrement(14);
-        scrollStickers.setPreferredSize(new Dimension(240, 220));
-
-        panelStickers.add(scrollStickers);
-        panelStickers.setPreferredSize(new Dimension(250, 230));
-        return panelStickers;
+        return p;
     }
 
-    private BufferedImage redimensionarBuffered(BufferedImage original, int anchoMax, int altoMax) {
-        int anchoOriginal = original.getWidth();
-        int altoOriginal = original.getHeight();
-        double ratio = Math.min((double) anchoMax / anchoOriginal, (double) altoMax / altoOriginal);
-        int nuevoAncho = (int) (anchoOriginal * ratio);
-        int nuevoAlto = (int) (altoOriginal * ratio);
+    private JPanel crearItemResultado(String linea, String filtro) {
+        JPanel item = new JPanel(new BorderLayout(0, 4));
+        item.setBackground(Theme.surfaceLowest());
+        item.setBorder(BorderFactory.createCompoundBorder(
+                new RoundBorder(Theme.RADIUS_SM, Theme.outlineVariant()),
+                new EmptyBorder(10, 12, 10, 12)));
+        item.setMaximumSize(new Dimension(Integer.MAX_VALUE, 70));
+        item.setCursor(new Cursor(Cursor.HAND_CURSOR));
 
-        BufferedImage redimensionada = new BufferedImage(nuevoAncho, nuevoAlto, BufferedImage.TYPE_INT_ARGB);
-        Graphics2D g = redimensionada.createGraphics();
+        try {
+            int idxCierre = linea.indexOf("] ");
+            String fecha = linea.substring(1, 11);
+            String resto = linea.substring(idxCierre + 2);
+            int idxDP = resto.indexOf(": ");
+            if (idxCierre == -1 || idxDP == -1) throw new Exception();
+
+            String remitente = resto.substring(0, idxDP);
+            String mensaje = resto.substring(idxDP + 2);
+
+            JLabel lblFecha = new JLabel(fecha);
+            lblFecha.setFont(Theme.fontMono(10));
+            lblFecha.setForeground(Theme.onSurfaceVariant());
+
+            String regex = "(?i)(" + Pattern.quote(filtro) + ")";
+            String res = mensaje.replaceAll(regex, "<b style='color: #2563EB; background: #EFF6FF;'>$1</b>");
+            JLabel lblMsg = new JLabel("<html><div style='width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>"
+                    + "<b>" + remitente + ":</b> " + res + "</div></html>");
+            lblMsg.setFont(Theme.font(12, Font.PLAIN));
+            lblMsg.setForeground(Theme.onSurface());
+
+            item.add(lblFecha, BorderLayout.NORTH);
+            item.add(lblMsg,   BorderLayout.CENTER);
+
+            final String target = mensaje;
+            item.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) { scrollHaciaTexto(target); }
+            });
+        } catch (Exception e) {
+            JLabel lbl = new JLabel(linea);
+            lbl.setFont(Theme.font(12, Font.PLAIN));
+            item.add(lbl, BorderLayout.CENTER);
+        }
+        return item;
+    }
+
+    private void scrollHaciaTexto(String texto) {
+        for (int i = 0; i < panelContenedorMensajes.getComponentCount(); i++) {
+            BurbujaMensaje b = encontrarBurbuja(panelContenedorMensajes.getComponent(i));
+            if (b != null) {
+                String t = obtenerTexto(b);
+                if (t != null && t.contains(texto)) {
+                    SwingUtilities.invokeLater(() -> {
+                        Rectangle r = SwingUtilities.convertRectangle(panelContenedorMensajes, b.getBounds(), scrollLectura.getViewport());
+                        JScrollBar vertical = scrollLectura.getVerticalScrollBar();
+                        vertical.setValue(Math.max(0, r.y - 20));
+                    });
+                    return;
+                }
+            }
+        }
+    }
+
+    private BurbujaMensaje encontrarBurbuja(Component c) {
+        if (c instanceof BurbujaMensaje) return (BurbujaMensaje) c;
+        if (c instanceof java.awt.Container) {
+            for (Component child : ((java.awt.Container) c).getComponents()) {
+                BurbujaMensaje b = encontrarBurbuja(child);
+                if (b != null) return b;
+            }
+        }
+        return null;
+    }
+
+    private String obtenerTexto(Component c) {
+        if (c instanceof BurbujaMensaje) {
+            return BurbujaExtractor.extraer((BurbujaMensaje) c);
+        }
+        if (c instanceof java.awt.Container) {
+            for (Component child : ((java.awt.Container) c).getComponents()) {
+                String t = obtenerTexto(child);
+                if (t != null && !t.trim().isEmpty()) return t;
+            }
+        }
+        return null;
+    }
+
+    /* ============================ Popups (emojis / stickers) ============================ */
+
+    private JPopupMenu crearPopupEmojis() {
+        JPopupMenu panel = new JPopupMenu();
+        panel.setBackground(Theme.surfaceLowest());
+        panel.setBorder(new RoundBorder(Theme.RADIUS_MD, Theme.outlineVariant()));
+
+        String[] emojis = {"😀","😂","😊","😍","🤔","😥","😡","👍","🙌","🔥","🎉","❤️"};
+        JPanel grid = new JPanel(new GridLayout(3, 4, 4, 4));
+        grid.setBackground(Theme.surfaceLowest());
+        grid.setBorder(new EmptyBorder(6, 6, 6, 6));
+        for (String e : emojis) {
+            JButton b = new JButton(e);
+            b.setFont(Theme.fontEmoji(22, Font.PLAIN));
+            b.setBackground(Theme.surfaceLowest());
+            b.setBorder(new EmptyBorder(2, 2, 2, 2));
+            b.setFocusPainted(false);
+            b.setCursor(new Cursor(Cursor.HAND_CURSOR));
+            b.addActionListener(ev -> {
+                taInputMensaje.append(e);
+                taInputMensaje.requestFocus();
+                panel.setVisible(false);
+            });
+            grid.add(b);
+        }
+        panel.add(grid);
+        panel.setPreferredSize(new Dimension(260, 150));
+        return panel;
+    }
+
+    private JPopupMenu crearPopupStickers() {
+        JPopupMenu panel = new JPopupMenu();
+        panel.setBackground(Theme.surfaceLowest());
+
+        File carpeta = new File("stickers");
+        if (!carpeta.exists()) carpeta.mkdir();
+        File[] archivos = carpeta.listFiles((dir, name) -> {
+            String l = name.toLowerCase();
+            return l.endsWith(".png") || l.endsWith(".jpg") || l.endsWith(".jpeg") || l.endsWith(".gif");
+        });
+        if (archivos == null || archivos.length == 0) {
+            JLabel info = new JLabel("<html><center>Carpeta <b>stickers/</b> vacía.<br>Guarda imágenes PNG o JPG allí.</center></html>", SwingConstants.CENTER);
+            info.setFont(Theme.font(12, Font.PLAIN));
+            info.setForeground(Theme.onSurfaceVariant());
+            info.setBorder(new EmptyBorder(15, 15, 15, 15));
+            info.setOpaque(true);
+            info.setBackground(Theme.surfaceLowest());
+            panel.add(info);
+            panel.setPreferredSize(new Dimension(240, 90));
+            return panel;
+        }
+        int cols = 3;
+        int filas = (int) Math.ceil((double) archivos.length / cols);
+        JPanel grid = new JPanel(new GridLayout(filas, cols, 6, 6));
+        grid.setBackground(Theme.surfaceLowest());
+        grid.setBorder(new EmptyBorder(6, 6, 6, 6));
+
+        for (File f : archivos) {
+            try {
+                BufferedImage orig = ImageIO.read(f);
+                if (orig == null) continue;
+                BufferedImage thumb = redimensionarBuffered(orig, 55, 55);
+                JButton b = new JButton(new ImageIcon(thumb));
+                b.setBackground(Theme.surfaceLow());
+                b.setBorder(new RoundBorder(Theme.RADIUS_SM, Theme.outlineVariant()));
+                b.setFocusPainted(false);
+                b.setCursor(new Cursor(Cursor.HAND_CURSOR));
+                b.setToolTipText(f.getName());
+                b.addActionListener(ev -> {
+                    BufferedImage std = redimensionarBuffered(orig, 120, 120);
+                    String b64 = bufferedToBase64(std);
+                    if (b64 != null && accionEnviarSticker != null) accionEnviarSticker.accept(b64);
+                    panel.setVisible(false);
+                });
+                grid.add(b);
+            } catch (Exception ex) { System.err.println("Sticker load failed: " + f.getName()); }
+        }
+        JScrollPane sp = new JScrollPane(grid);
+        sp.setOpaque(false);
+        sp.getViewport().setOpaque(false);
+        sp.setBorder(null);
+        sp.setPreferredSize(new Dimension(240, 220));
+        panel.add(sp);
+        panel.setPreferredSize(new Dimension(250, 230));
+        return panel;
+    }
+
+    private BufferedImage redimensionarBuffered(BufferedImage orig, int w, int h) {
+        double r = Math.min((double) w / orig.getWidth(), (double) h / orig.getHeight());
+        int nw = (int) (orig.getWidth() * r);
+        int nh = (int) (orig.getHeight() * r);
+        BufferedImage out = new BufferedImage(nw, nh, BufferedImage.TYPE_INT_ARGB);
+        Graphics2D g = out.createGraphics();
         g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-        g.drawImage(original, 0, 0, nuevoAncho, nuevoAlto, null);
+        g.drawImage(orig, 0, 0, nw, nh, null);
         g.dispose();
-        return redimensionada;
+        return out;
     }
 
-    private String bufferedToBase64(BufferedImage image) {
+    private String bufferedToBase64(BufferedImage img) {
         try {
-            ByteArrayOutputStream baos = new ByteArrayOutputStream();
-            ImageIO.write(image, "png", baos);
-            return Base64.getEncoder().encodeToString(baos.toByteArray());
-        } catch (Exception e) {
-            return null;
-        }
+            java.io.ByteArrayOutputStream b = new java.io.ByteArrayOutputStream();
+            ImageIO.write(img, "png", b);
+            return Base64.getEncoder().encodeToString(b.toByteArray());
+        } catch (Exception e) { return null; }
     }
+
+    /* ============================ Mostrar mensajes (API pública) ============================ */
 
     public void mostrarMensajeConColor(String remitente, String mensaje, Color colorRemitente) {
         String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
         boolean esMio = nombreLimpio.equals("Tú");
-
-        BurbujaMensaje burbuja = new BurbujaMensaje(nombreLimpio, mensaje.trim(), colorRemitente, esMio);
-        panelContenedorMensajes.add(burbuja);
+        BurbujaMensaje b = new BurbujaMensaje(nombreLimpio, mensaje.trim(), colorRemitente, esMio);
+        panelContenedorMensajes.add(b);
         panelContenedorMensajes.revalidate();
         panelContenedorMensajes.repaint();
         desplazarScrollAlFinal();
@@ -620,9 +713,8 @@ public class VentanaChat extends JFrame {
     public void mostrarImagenConColor(String remitente, ImageIcon imagen, Color colorRemitente) {
         String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
         boolean esMio = nombreLimpio.equals("Tú");
-
-        BurbujaMensaje burbuja = new BurbujaMensaje(nombreLimpio, imagen, colorRemitente, esMio);
-        panelContenedorMensajes.add(burbuja);
+        BurbujaMensaje b = new BurbujaMensaje(nombreLimpio, imagen, colorRemitente, esMio);
+        panelContenedorMensajes.add(b);
         panelContenedorMensajes.revalidate();
         panelContenedorMensajes.repaint();
         desplazarScrollAlFinal();
@@ -632,28 +724,26 @@ public class VentanaChat extends JFrame {
         String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
         boolean esMio = nombreLimpio.equals("Tú");
 
-        JPanel panelAlineador = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
-        panelAlineador.setOpaque(false);
-
-        JPanel panelStickerCompleto = new JPanel();
-        panelStickerCompleto.setLayout(new BoxLayout(panelStickerCompleto, BoxLayout.Y_AXIS));
-        panelStickerCompleto.setOpaque(false);
-        panelStickerCompleto.setBorder(new EmptyBorder(5, 10, 5, 10));
+        JPanel alin = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        alin.setOpaque(false);
+        JPanel wrap = new JPanel();
+        wrap.setLayout(new BoxLayout(wrap, BoxLayout.Y_AXIS));
+        wrap.setOpaque(false);
+        wrap.setBorder(new EmptyBorder(4, 10, 4, 10));
 
         JLabel lblNombre = new JLabel(nombreLimpio);
-        lblNombre.setFont(new Font("Segoe UI", Font.BOLD, 11));
+        lblNombre.setFont(Theme.font(12, Font.BOLD));
         lblNombre.setForeground(colorRemitente);
         lblNombre.setAlignmentX(esMio ? Component.RIGHT_ALIGNMENT : Component.LEFT_ALIGNMENT);
-        panelStickerCompleto.add(lblNombre);
+        wrap.add(lblNombre);
+        wrap.add(Box.createVerticalStrut(2));
 
-        panelStickerCompleto.add(Box.createVerticalStrut(4));
+        JLabel lblSticker = new JLabel(sticker);
+        lblSticker.setAlignmentX(esMio ? Component.RIGHT_ALIGNMENT : Component.LEFT_ALIGNMENT);
+        wrap.add(lblSticker);
 
-        JLabel lblStickerGrafico = new JLabel(sticker);
-        lblStickerGrafico.setAlignmentX(esMio ? Component.RIGHT_ALIGNMENT : Component.LEFT_ALIGNMENT);
-        panelStickerCompleto.add(lblStickerGrafico);
-
-        panelAlineador.add(panelStickerCompleto);
-        panelContenedorMensajes.add(panelAlineador);
+        alin.add(wrap);
+        panelContenedorMensajes.add(alin);
         panelContenedorMensajes.revalidate();
         panelContenedorMensajes.repaint();
         desplazarScrollAlFinal();
@@ -663,63 +753,137 @@ public class VentanaChat extends JFrame {
         String nombreLimpio = remitente.replace("[", "").replace("]: ", "").replace("Tú: ", "Tú");
         boolean esMio = nombreLimpio.equals("Tú");
 
-        JPanel panelAlineador = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
-        panelAlineador.setOpaque(false);
+        JPanel alin = new JPanel(new FlowLayout(esMio ? FlowLayout.RIGHT : FlowLayout.LEFT));
+        alin.setOpaque(false);
 
-        JPanel panelCaja = new JPanel(new BorderLayout(5, 5));
-        panelCaja.setBackground(Color.WHITE);
-        panelCaja.setBorder(BorderFactory.createCompoundBorder(
-                new LineBorder(new Color(203, 213, 225), 1, true),
-                new EmptyBorder(8, 12, 8, 12)
-        ));
+        JPanel caja = new JPanel(new BorderLayout(8, 0)) {
+            @Override protected void paintComponent(java.awt.Graphics g) {
+                java.awt.Graphics2D g2 = (java.awt.Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                g2.setColor(Theme.surfaceLowest());
+                g2.fillRoundRect(0, 0, getWidth(), getHeight(), Theme.RADIUS_XL, Theme.RADIUS_XL);
+                g2.setColor(Theme.outlineVariant());
+                g2.drawRoundRect(0, 0, getWidth() - 1, getHeight() - 1, Theme.RADIUS_XL, Theme.RADIUS_XL);
+                g2.dispose();
+                super.paintComponent(g);
+            }
+            @Override public boolean isOpaque() { return false; }
+        };
+        caja.setOpaque(false);
+        caja.setBorder(new EmptyBorder(10, 14, 10, 14));
 
         JLabel lblNombre = new JLabel(nombreLimpio);
-        lblNombre.setFont(new Font("Segoe UI", Font.BOLD, 12));
+        lblNombre.setFont(Theme.font(12, Font.BOLD));
         lblNombre.setForeground(colorRemitente);
 
-        JButton btnDescargar = new JButton("⬇️ " + nombreArchivo);
-        btnDescargar.setFont(new Font("Segoe UI", Font.PLAIN, 13));
-        btnDescargar.setBackground(new Color(241, 245, 249));
-        btnDescargar.setCursor(new Cursor(Cursor.HAND_CURSOR));
-        btnDescargar.setFocusable(false);
+        JPanel filaBoton = new JPanel(new BorderLayout(8, 0));
+        filaBoton.setOpaque(false);
+        JLabel iconFile = new JLabel(MaterialGlyph.attachFile(18, Theme.primary()));
+        JLabel lblFile = new JLabel(nombreArchivo);
+        lblFile.setFont(Theme.font(13, Font.PLAIN));
+        lblFile.setForeground(Theme.onSurface());
+        filaBoton.add(iconFile, BorderLayout.WEST);
+        filaBoton.add(lblFile, BorderLayout.CENTER);
 
+        JButton btnDescargar = new GhostButton("Descargar", MaterialGlyph.download(16, Theme.primary()), 999);
+        btnDescargar.setFont(Theme.font(12, Font.BOLD));
+        btnDescargar.setForeground(Theme.primary());
+        btnDescargar.setBackground(Theme.surfaceLow());
+        btnDescargar.setOpaque(true);
         btnDescargar.addActionListener(e -> {
-            JFileChooser fileChooser = new JFileChooser();
-            fileChooser.setDialogTitle("Guardar archivo como...");
-            fileChooser.setSelectedFile(new File(nombreArchivo));
-
-            if (fileChooser.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
-                File destino = fileChooser.getSelectedFile();
+            JFileChooser fc = new JFileChooser();
+            fc.setDialogTitle("Guardar archivo como...");
+            fc.setSelectedFile(new File(nombreArchivo));
+            if (fc.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
+                File destino = fc.getSelectedFile();
                 if (ManejadorArchivos.guardarArchivoManual(base64, destino)) {
                     JOptionPane.showMessageDialog(this,
-                            "Archivo guardado exitosamente en:\n" + destino.getAbsolutePath(),
-                            "Descarga Completada",
-                            JOptionPane.INFORMATION_MESSAGE);
+                            "Archivo guardado en:\n" + destino.getAbsolutePath(),
+                            "Descarga completada", JOptionPane.INFORMATION_MESSAGE);
                 }
             }
         });
+        filaBoton.add(btnDescargar, BorderLayout.EAST);
 
-        panelCaja.add(lblNombre, BorderLayout.NORTH);
-        panelCaja.add(btnDescargar, BorderLayout.CENTER);
-        panelAlineador.add(panelCaja);
+        JPanel inner = new JPanel();
+        inner.setOpaque(false);
+        inner.setLayout(new BoxLayout(inner, BoxLayout.Y_AXIS));
+        lblNombre.setAlignmentX(Component.LEFT_ALIGNMENT);
+        filaBoton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        inner.add(lblNombre);
+        inner.add(Box.createVerticalStrut(4));
+        inner.add(filaBoton);
 
-        panelContenedorMensajes.add(panelAlineador);
+        caja.add(inner, BorderLayout.CENTER);
+        alin.add(caja);
+        panelContenedorMensajes.add(alin);
         panelContenedorMensajes.revalidate();
         panelContenedorMensajes.repaint();
         desplazarScrollAlFinal();
     }
 
     public void mostrarMensajePlano(String textoAnterior) {
-        JTextArea textoHistorial = new JTextArea(textoAnterior);
-        textoHistorial.setEditable(false);
-        textoHistorial.setOpaque(false);
-        textoHistorial.setForeground(new Color(71, 85, 105));
-        textoHistorial.setFont(new Font("Segoe UI", Font.ITALIC, 12));
-        JPanel panelAlineador = new JPanel(new FlowLayout(FlowLayout.CENTER));
-        panelAlineador.setOpaque(false);
-        panelAlineador.add(textoHistorial);
-        panelContenedorMensajes.add(panelAlineador);
+        JLabel lbl = new JLabel(textoAnterior);
+        lbl.setFont(Theme.font(12, Font.ITALIC));
+        lbl.setForeground(Theme.onSurfaceVariant());
+        JPanel alin = new JPanel(new FlowLayout(FlowLayout.CENTER));
+        alin.setOpaque(false);
+        alin.add(lbl);
+        panelContenedorMensajes.add(alin);
     }
+
+    /* ============================ Typing indicator (API pública) ============================ */
+
+    public void mostrarEscribiendo(boolean escribiendo) {
+        SwingUtilities.invokeLater(() -> {
+            if (escribiendo) {
+                lblEscribiendo.setIcon(dotsIcon());
+                lblEscribiendo.setText("escribiendo...");
+                lblEscribiendo.setIconTextGap(6);
+            } else {
+                lblEscribiendo.setIcon(null);
+                lblEscribiendo.setText(" ");
+            }
+        });
+    }
+
+    public void mostrarEscribiendoGrupal(String remitente, boolean escribiendo) {
+        SwingUtilities.invokeLater(() -> {
+            if (escribiendo) usuariosEscribiendo.add(remitente);
+            else              usuariosEscribiendo.remove(remitente);
+            if (usuariosEscribiendo.isEmpty()) {
+                lblEscribiendo.setIcon(null);
+                lblEscribiendo.setText(" ");
+            } else if (usuariosEscribiendo.size() == 1) {
+                lblEscribiendo.setIcon(dotsIcon());
+                lblEscribiendo.setText(usuariosEscribiendo.iterator().next() + " está escribiendo...");
+                lblEscribiendo.setIconTextGap(6);
+            } else {
+                lblEscribiendo.setIcon(dotsIcon());
+                lblEscribiendo.setText("Varios usuarios están escribiendo...");
+                lblEscribiendo.setIconTextGap(6);
+            }
+        });
+    }
+
+    private Icon dotsIcon() {
+        return new javax.swing.Icon() {
+            public int getIconWidth()  { return 18; }
+            public int getIconHeight() { return 10; }
+            public void paintIcon(Component c, Graphics g, int x, int y) {
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+                int r = 2;
+                g2.setColor(Theme.primary());
+                g2.fillOval(x + 2, y + 4 - r, r * 2, r * 2);
+                g2.fillOval(x + 7, y + 4 - r, r * 2, r * 2);
+                g2.fillOval(x + 12, y + 4 - r, r * 2, r * 2);
+                g2.dispose();
+            }
+        };
+    }
+
+    /* ============================ Util ============================ */
 
     private void desplazarScrollAlFinal() {
         SwingUtilities.invokeLater(() -> {
@@ -728,15 +892,37 @@ public class VentanaChat extends JFrame {
         });
     }
 
-    public void setAccionEscribiendo(java.util.function.Consumer<Boolean> accion) { this.accionEscribiendo = accion; }
-    public void setOnImagenSeleccionada(java.util.function.Consumer<File> accion) { this.accionEnviarImagen = accion; }
-    public void setOnArchivoSeleccionado(java.util.function.Consumer<File> accion) { this.accionEnviarArchivo = accion; }
-    public void setOnStickerSeleccionado(java.util.function.Consumer<String> accion) { this.accionEnviarSticker = accion; }
+    private JButton iconButton(Icon icon, String tooltip) {
+        JButton b = new JButton(icon);
+        b.setFocusPainted(false);
+        b.setBorderPainted(false);
+        b.setContentAreaFilled(false);
+        b.setOpaque(false);
+        b.setBorder(null);
+        b.setMargin(new Insets(0, 0, 0, 0));
+        b.setIconTextGap(0);
+        b.setHorizontalTextPosition(SwingConstants.CENTER);
+        b.setVerticalTextPosition(SwingConstants.CENTER);
+        b.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        // Sin un preferredSize, JButton puede colapsar a <24px y comerse el icono.
+        b.setPreferredSize(new Dimension(40, 40));
+        b.setMinimumSize(new Dimension(32, 32));
+        if (tooltip != null) b.setToolTipText(tooltip);
+        return b;
+    }
+
+    /* ============================ API pública setters/getters ============================ */
+
+    public void setAccionEscribiendo(java.util.function.Consumer<Boolean> a) { this.accionEscribiendo = a; }
+    public void setOnImagenSeleccionada(java.util.function.Consumer<File> a) { this.accionEnviarImagen = a; }
+    public void setOnArchivoSeleccionado(java.util.function.Consumer<File> a) { this.accionEnviarArchivo = a; }
+    public void setOnStickerSeleccionado(java.util.function.Consumer<String> a) { this.accionEnviarSticker = a; }
     public String getMensajeEscrito() { return taInputMensaje.getText(); }
 
     public void limpiarInput() {
         taInputMensaje.setText("");
         taInputMensaje.requestFocus();
+        jbtnEnviar.setEnabled(false);
         if (isTyping) {
             isTyping = false;
             timerEscribiendo.stop();
@@ -744,69 +930,5 @@ public class VentanaChat extends JFrame {
         }
     }
 
-    public void setAccionEnviar(ActionListener accion) { jbtnEnviar.addActionListener(accion); }
-
-    // --- ICONOS VECTORIALES (GARANTIZAN COMPATIBILIDAD) ---
-    private static class ClipIcon implements Icon {
-        @Override
-        public void paintIcon(Component c, Graphics g, int x, int y) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(71, 85, 105));
-            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2.translate(x, y);
-            g2.drawLine(12, 5, 12, 13);
-            g2.drawArc(4, 9, 8, 8, 180, 180);
-            g2.drawLine(4, 13, 4, 5);
-            g2.drawArc(4, 2, 6, 6, 0, 180);
-            g2.drawLine(10, 5, 10, 11);
-            g2.drawArc(6, 9, 4, 4, 180, 180);
-            g2.drawLine(6, 11, 6, 7);
-            g2.dispose();
-        }
-        @Override public int getIconWidth() { return 18; }
-        @Override public int getIconHeight() { return 18; }
-    }
-
-    private static class FotoIcon implements Icon {
-        @Override
-        public void paintIcon(Component c, Graphics g, int x, int y) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(71, 85, 105));
-            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2.translate(x, y);
-            g2.drawRoundRect(2, 3, 14, 12, 2, 2);
-            g2.drawOval(5, 6, 3, 3);
-            g2.drawLine(2, 12, 7, 7);
-            g2.drawLine(7, 7, 11, 11);
-            g2.drawLine(10, 10, 12, 8);
-            g2.drawLine(12, 8, 16, 12);
-            g2.dispose();
-        }
-        @Override public int getIconWidth() { return 18; }
-        @Override public int getIconHeight() { return 18; }
-    }
-
-    private static class StickerIcon implements Icon {
-        @Override
-        public void paintIcon(Component c, Graphics g, int x, int y) {
-            Graphics2D g2 = (Graphics2D) g.create();
-            g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
-            g2.setColor(new Color(71, 85, 105));
-            g2.setStroke(new BasicStroke(1.5f, BasicStroke.CAP_ROUND, BasicStroke.JOIN_ROUND));
-            g2.translate(x, y);
-            g2.drawLine(9, 1, 9, 7);
-            g2.drawLine(9, 11, 9, 17);
-            g2.drawLine(1, 9, 7, 9);
-            g2.drawLine(11, 9, 17, 9);
-            g2.drawLine(3, 3, 6, 6);
-            g2.drawLine(12, 12, 15, 15);
-            g2.drawLine(15, 3, 12, 6);
-            g2.drawLine(6, 12, 3, 15);
-            g2.dispose();
-        }
-        @Override public int getIconWidth() { return 18; }
-        @Override public int getIconHeight() { return 18; }
-    }
+    public void setAccionEnviar(ActionListener a) { jbtnEnviar.addActionListener(a); }
 }
