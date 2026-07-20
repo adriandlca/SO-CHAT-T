@@ -46,10 +46,16 @@ public class HistorialChat {
     public static class Mensaje {
         private final String remitente;
         private String texto;
+        private String fecha; // "yyyy-MM-dd" del archivo, "" si no se pudo extraer
 
         public Mensaje(String remitente, String texto) {
+            this(remitente, texto, "");
+        }
+
+        public Mensaje(String remitente, String texto, String fecha) {
             this.remitente = remitente;
             this.texto = texto;
+            this.fecha = fecha == null ? "" : fecha;
         }
 
         public String getRemitente() {
@@ -62,6 +68,10 @@ public class HistorialChat {
 
         public void setTexto(String texto) {
             this.texto = texto;
+        }
+
+        public String getFecha() {
+            return fecha;
         }
     }
 
@@ -122,15 +132,16 @@ public class HistorialChat {
                     int indiceCierre = linea.indexOf("] ");
 
                     if (linea.startsWith("[") && indiceCierre != -1) {
+                        String fecha = extraerFecha(linea);
                         String resto = linea.substring(indiceCierre + 2);
                         int colonIndex = resto.indexOf(": ");
                         if (colonIndex != -1) {
                             String remitente = resto.substring(0, colonIndex);
                             String texto = resto.substring(colonIndex + 2);
-                            ultimoMensaje = new Mensaje(remitente, texto);
+                            ultimoMensaje = new Mensaje(remitente, texto, fecha);
                             historial.add(ultimoMensaje);
                         } else {
-                            ultimoMensaje = new Mensaje("", resto);
+                            ultimoMensaje = new Mensaje("", resto, fecha);
                             historial.add(ultimoMensaje);
                         }
                     } else {
@@ -147,5 +158,14 @@ public class HistorialChat {
             }
         }
         return historial;
+    }
+
+    /** Extrae "yyyy-MM-dd" del prefijo "[yyyy-MM-dd HH:mm:ss] ..."; "" si no aplica. */
+    private static String extraerFecha(String linea) {
+        if (linea.length() >= 12 && linea.charAt(11) == ' ') {
+            String f = linea.substring(1, 11);
+            if (f.matches("\\d{4}-\\d{2}-\\d{2}")) return f;
+        }
+        return "";
     }
 }

@@ -3,6 +3,7 @@ package Views;
 import Views.theme.Avatar;
 import Views.theme.GhostButton;
 import Views.theme.MaterialGlyph;
+import Views.theme.PlaceholderTextField;
 import Views.theme.PrimaryButton;
 import Views.theme.RoundBorder;
 import Views.theme.Theme;
@@ -315,8 +316,7 @@ public class VentanaContactos extends JFrame {
     /* ----- Buscador reutilizable ----- */
 
     private JTextField crearBuscador(String placeholder) {
-        JTextField txt = new JTextField() {
-            @Override public boolean isOpaque() { return false; }
+        PlaceholderTextField txt = new PlaceholderTextField(placeholder) {
             @Override public Color getBackground() { return new Color(0, 0, 0, 0); }
         };
         txt.setOpaque(false);

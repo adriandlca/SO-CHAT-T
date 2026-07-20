@@ -4,6 +4,7 @@ import Controllers.HistorialChat;
 import Views.theme.Avatar;
 import Views.theme.GhostButton;
 import Views.theme.MaterialGlyph;
+import Views.theme.PlaceholderTextField;
 import Views.theme.PrimaryButton;
 import Views.theme.RoundBorder;
 import Views.theme.SoftShadowBorder;
@@ -347,7 +348,7 @@ public class VentanaChatUnificado extends JFrame {
         JPanel wrap = new JPanel(new BorderLayout(0, 8));
         wrap.setOpaque(false);
 
-        txtBuscarUsuarios = crearBuscador();
+        txtBuscarUsuarios = crearBuscador("Buscar usuario…");
         txtBuscarUsuarios.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { rebuildCards(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { rebuildCards(); }
@@ -389,7 +390,7 @@ public class VentanaChatUnificado extends JFrame {
         JPanel wrap = new JPanel(new BorderLayout(0, 8));
         wrap.setOpaque(false);
 
-        txtBuscarGrupos = crearBuscador();
+        txtBuscarGrupos = crearBuscador("Buscar grupo…");
         txtBuscarGrupos.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
             public void insertUpdate(javax.swing.event.DocumentEvent e) { rebuildCards(); }
             public void removeUpdate(javax.swing.event.DocumentEvent e) { rebuildCards(); }
@@ -425,9 +426,8 @@ public class VentanaChatUnificado extends JFrame {
         return wrap;
     }
 
-    private JTextField crearBuscador() {
-        JTextField txt = new JTextField() {
-            @Override public boolean isOpaque() { return false; }
+    private JTextField crearBuscador(String placeholder) {
+        PlaceholderTextField txt = new PlaceholderTextField(placeholder) {
             @Override public Color getBackground() { return new Color(0, 0, 0, 0); }
         };
         txt.setOpaque(false);
@@ -620,18 +620,21 @@ public class VentanaChatUnificado extends JFrame {
         }
         card.add(right, BorderLayout.EAST);
 
-        card.addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override public void mouseClicked(java.awt.event.MouseEvent e) {
-                if (e.getClickCount() == 1) {
-                    if (privado) {
-                        String pwd = solicitarContrasenaGrupo(nombre);
-                        if (pwd == null) return;
+            card.addMouseListener(new java.awt.event.MouseAdapter() {
+                @Override public void mouseClicked(java.awt.event.MouseEvent e) {
+                    if (e.getClickCount() == 1) {
+                        String pwd = null;
+                        if (privado) {
+                            pwd = solicitarContrasenaGrupo(nombre);
+                            if (pwd == null) return;
+                        }
+                        // SIEMPRE nos unimos al grupo en el servidor al abrirlo
+                        // (público o privado), si no, los mensajes en vivo nunca
+                        // llegan al cliente que abre el chat sin haberse unido.
                         if (grupoListener != null) grupoListener.onUnirseGrupo(nombre, pwd);
-                    } else {
                         abrirConversacion(nombre, true);
                     }
                 }
-            }
             @Override public void mouseEntered(java.awt.event.MouseEvent e) { card.setBackground(Theme.surfaceLow()); }
             @Override public void mouseExited(java.awt.event.MouseEvent e)  { card.setBackground(null); }
         });
@@ -738,16 +741,27 @@ public class VentanaChatUnificado extends JFrame {
 
     private void cargarHistorialEn(ChatPanel chat, String destino, boolean grupo) {
         List<HistorialChat.Mensaje> historial = HistorialChat.cargarHistorial(miUsuario, destino, grupo);
-        if (!historial.isEmpty()) {
-            chat.mostrarSeparadorDia("Hoy");
-        }
+        String hoy = java.time.LocalDate.now().toString();
+        String ayer = java.time.LocalDate.now().minusDays(1).toString();
+        java.time.format.DateTimeFormatter fmtCorto = java.time.format.DateTimeFormatter.ofPattern("d MMM");
+        String fechaUltima = null;
+
         for (HistorialChat.Mensaje msg : historial) {
             String rem = msg.getRemitente();
             if (rem == null || rem.isEmpty()) rem = destino;
             String t = msg.getTexto();
             if (t == null || t.isEmpty()) continue;
-            // El parser detecta prefijos [IMAGEN], [ARCHIVO], [STICKER] y renderiza correctamente.
-            // Se pinta siempre en color gris (es historial propio).
+
+            String f = msg.getFecha();
+            if (!f.isEmpty() && !f.equals(fechaUltima)) {
+                String etiqueta;
+                if (f.equals(hoy))        etiqueta = "Hoy";
+                else if (f.equals(ayer))  etiqueta = "Ayer";
+                else                      etiqueta = java.time.LocalDate.parse(f).format(fmtCorto);
+                chat.mostrarSeparadorDia(etiqueta);
+                fechaUltima = f;
+            }
+
             chat.procesarMensajeDeHistorial(rem, t, new Color(0x80, 0x80, 0x80));
         }
         chat.repaint();

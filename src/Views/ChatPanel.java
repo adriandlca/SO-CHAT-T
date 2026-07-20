@@ -3,6 +3,7 @@ package Views;
 import Controllers.HistorialChat;
 import Views.theme.GhostButton;
 import Views.theme.MaterialGlyph;
+import Views.theme.PlaceholderTextField;
 import Views.theme.RoundBorder;
 import Views.theme.Theme;
 import java.awt.BorderLayout;
@@ -514,13 +515,12 @@ public class ChatPanel extends JPanel {
         inputRow.setBorder(new EmptyBorder(0, 12, 0, 12));
         inputRow.setPreferredSize(new Dimension(0, 38));
 
-        JTextField txtBuscar = new JTextField("Buscar…") {
-            @Override public boolean isOpaque() { return false; }
-        };
+        PlaceholderTextField txtBuscar = new PlaceholderTextField("Buscar…");
         txtBuscar.setOpaque(false);
         txtBuscar.setBorder(null);
         txtBuscar.setFont(Theme.fontBase());
         txtBuscar.setForeground(Theme.onSurface());
+        txtBuscar.setCaretColor(Theme.primary());
 
         inputRow.add(new JLabel(MaterialGlyph.search(18, Theme.onSurfaceVariant())), BorderLayout.WEST);
         inputRow.add(txtBuscar, BorderLayout.CENTER);
@@ -543,26 +543,60 @@ public class ChatPanel extends JPanel {
         scrollR.getVerticalScrollBar().setUnitIncrement(14);
         p.add(scrollR, BorderLayout.CENTER);
 
-        txtBuscar.getDocument().addDocumentListener(new DocumentListener() {
-            public void insertUpdate(DocumentEvent e) { ejecutar(); }
-            public void removeUpdate(DocumentEvent e) { ejecutar(); }
-            public void changedUpdate(DocumentEvent e) { ejecutar(); }
-            private void ejecutar() {
-                String filtro = txtBuscar.getText();
-                panelResultados.removeAll();
-                if (!filtro.trim().isEmpty()) {
-                    List<String> matches = HistorialChat.buscarMensajes(miUsuario, contactoDestino, filtro, esGrupo);
-                    for (String linea : matches) {
-                        panelResultados.add(crearItemResultado(linea, filtro));
-                        panelResultados.add(Box.createVerticalStrut(6));
-                    }
+        Timer debounceBuscar = new Timer(150, null);
+        debounceBuscar.setRepeats(false);
+        debounceBuscar.addActionListener(e -> {
+            String filtro = txtBuscar.getText();
+            panelResultados.removeAll();
+            if (filtro != null && !filtro.trim().isEmpty()) {
+                List<String> matches = HistorialChat.buscarMensajes(miUsuario, contactoDestino, filtro, esGrupo);
+                int max = Math.min(matches.size(), 100);
+                for (int i = 0; i < max; i++) {
+                    panelResultados.add(crearItemResultado(matches.get(i), filtro));
+                    panelResultados.add(Box.createVerticalStrut(6));
                 }
-                panelResultados.revalidate();
-                panelResultados.repaint();
+                if (matches.size() > max) {
+                    JLabel mas = new JLabel("… " + (matches.size() - max) + " resultados más");
+                    mas.setFont(Theme.font(11, Font.PLAIN));
+                    mas.setForeground(Theme.onSurfaceVariant());
+                    mas.setBorder(new EmptyBorder(4, 12, 4, 12));
+                    panelResultados.add(mas);
+                }
             }
+            panelResultados.revalidate();
+            panelResultados.repaint();
+        });
+        txtBuscar.getDocument().addDocumentListener(new DocumentListener() {
+            public void insertUpdate(DocumentEvent e) { debounceBuscar.restart(); }
+            public void removeUpdate(DocumentEvent e) { debounceBuscar.restart(); }
+            public void changedUpdate(DocumentEvent e) { debounceBuscar.restart(); }
         });
 
         return p;
+    }
+
+    /**
+     * Recorta el mensaje para mostrar solo un contexto corto alrededor de la
+     * primera ocurrencia del filtro. Esto evita renderizar mensajes enormes
+     * (que generaban HTML gigantesco y congelaban el scroll).
+     */
+    private String recortarMensaje(String mensaje, String filtro, int maxLen) {
+        if (mensaje == null) return "";
+        if (filtro == null || filtro.isEmpty()) {
+            return mensaje.length() <= maxLen ? mensaje : mensaje.substring(0, maxLen) + "…";
+        }
+        int idx = mensaje.toLowerCase().indexOf(filtro.toLowerCase());
+        if (idx < 0) {
+            return mensaje.length() <= maxLen ? mensaje : mensaje.substring(0, maxLen) + "…";
+        }
+        int radio = Math.max(0, (maxLen - filtro.length()) / 2);
+        int desde = Math.max(0, idx - radio);
+        int hasta = Math.min(mensaje.length(), desde + maxLen);
+        desde = Math.max(0, hasta - maxLen);
+        String snippet = mensaje.substring(desde, hasta);
+        if (desde > 0) snippet = "…" + snippet;
+        if (hasta < mensaje.length()) snippet = snippet + "…";
+        return snippet;
     }
 
     private JPanel crearItemResultado(String linea, String filtro) {
@@ -588,10 +622,12 @@ public class ChatPanel extends JPanel {
             lblFecha.setFont(Theme.fontMono(10));
             lblFecha.setForeground(Theme.onSurfaceVariant());
 
+            String mensajeMostrado = recortarMensaje(mensaje, filtro, 80);
             String regex = "(?i)(" + Pattern.quote(filtro) + ")";
-            String res = mensaje.replaceAll(regex, "<b style='color: #2563EB; background: #EFF6FF;'>$1</b>");
-            JLabel lblMsg = new JLabel("<html><div style='width: 240px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;'>"
-                    + "<b>" + remitente + ":</b> " + res + "</div></html>");
+            String res = mensajeMostrado.replaceAll(regex, "<b style='color:#2563EB;background:#EFF6FF;'>$1</b>");
+            String remitenteEsc = remitente.replace("<", "&lt;").replace(">", "&gt;");
+            JLabel lblMsg = new JLabel("<html><div style='width:240px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'>"
+                    + "<b>" + remitenteEsc + ":</b> " + res + "</div></html>");
             lblMsg.setFont(Theme.font(12, Font.PLAIN));
             lblMsg.setForeground(Theme.onSurface());
 
